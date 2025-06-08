@@ -11,7 +11,7 @@ const ProgramCounter: React.FC = () => {
         className="text-sm font-mono bg-white px-2 py-1 rounded border"
         data-component="pc-value"
       >
-        0x{cpu.pc.toString(16).toUpperCase().padStart(8, '0')}
+        0x{(cpu.pc >>> 0).toString(16).toUpperCase().padStart(8, '0')}
       </div>
     </div>
   );

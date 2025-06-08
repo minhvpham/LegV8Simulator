@@ -41,7 +41,7 @@ const CodeEditor: React.FC = () => {
           [/;.*$/, 'comment'],
           
           // Instructions
-          [/\b(ADD|SUB|AND|ORR|EOR|LSL|LSR|BR|B\.EQ|B\.NE|B\.LT|B\.LE|B\.GT|B\.GE|B\.MI|B\.PL|B\.VS|B\.VC|B\.HI|B\.LS|B\.AL|CBZ|CBNZ|B|BL|ADDI|SUBI|ANDI|ORRI|EORI|LDUR|STUR|LDURB|STURB|LDURH|STURH|LDURSW|MOVZ|MOVK|CMP|CMPI|ADDS|SUBS|ANDS|NOP)\b/, 'keyword'],
+          [/\b(ADD|ADDS|SUB|SUBS|AND|ANDS|ORR|EOR|LSL|LSR|BR|B\.EQ|B\.NE|B\.LT|B\.LE|B\.GT|B\.GE|B\.MI|B\.PL|B\.VS|B\.VC|B\.HI|B\.LS|B\.AL|CBZ|CBNZ|B|BL|ADDI|ADDIS|SUBI|SUBIS|ANDI|ANDIS|ORRI|EORI|LDUR|LDURB|LDURH|LDURSW|STUR|STURB|STURH|STURW|LDA|LDXR|STXR|MOVZ|MOVK|MOV|CMP|CMPI|NOP)\b/, 'keyword'],
           
           // Registers
           [/\b(X[0-9]|X[12][0-9]|X3[01]|XZR|SP|FP|LR)\b/, 'variable'],
@@ -103,14 +103,14 @@ const CodeEditor: React.FC = () => {
 
     // Valid LEGv8 instructions
     const validInstructions = [
-      'ADD', 'SUB', 'AND', 'ORR', 'EOR', 'LSL', 'LSR',
-      'ADDI', 'SUBI', 'ANDI', 'ORRI', 'EORI',
-      'LDUR', 'STUR', 'LDURB', 'STURB', 'LDURH', 'STURH', 'LDURSW',
+      'ADD', 'ADDS', 'SUB', 'SUBS', 'AND', 'ANDS', 'ORR', 'EOR', 'LSL', 'LSR',
+      'ADDI', 'ADDIS', 'SUBI', 'SUBIS', 'ANDI', 'ANDIS', 'ORRI', 'EORI',
+      'LDUR', 'LDURB', 'LDURH', 'LDURSW', 'STUR', 'STURB', 'STURH', 'STURW',
+      'LDA', 'LDXR', 'STXR',
       'B', 'BL', 'BR', 'CBZ', 'CBNZ',
       'B.EQ', 'B.NE', 'B.LT', 'B.LE', 'B.GT', 'B.GE',
       'B.MI', 'B.PL', 'B.VS', 'B.VC', 'B.HI', 'B.LS', 'B.AL',
-      'CMP', 'CMPI', 'ADDS', 'SUBS', 'ANDS',
-      'MOVZ', 'MOVK', 'NOP'
+      'CMP', 'CMPI', 'MOVZ', 'MOVK', 'MOV', 'NOP'
     ];
 
     // Valid registers
@@ -159,7 +159,7 @@ const CodeEditor: React.FC = () => {
       instructionCount++;
 
       // Basic syntax validation for different instruction types
-      if (['ADD', 'SUB', 'AND', 'ORR', 'EOR'].includes(instruction)) {
+      if (['ADD', 'ADDS', 'SUB', 'SUBS', 'AND', 'ANDS', 'ORR', 'EOR', 'MOV'].includes(instruction)) {
         // R-type: ADD Rd, Rn, Rm
         if (parts.length !== 4) {
           errors.push({
@@ -183,7 +183,7 @@ const CodeEditor: React.FC = () => {
         });
       }
 
-      if (['ADDI', 'SUBI', 'ANDI', 'ORRI', 'EORI'].includes(instruction)) {
+      if (['ADDI', 'ADDIS', 'SUBI', 'SUBIS', 'ANDI', 'ANDIS', 'ORRI', 'EORI'].includes(instruction)) {
         // I-type: ADDI Rd, Rn, #immediate
         if (parts.length !== 4) {
           errors.push({
@@ -215,7 +215,7 @@ const CodeEditor: React.FC = () => {
         }
       }
 
-      if (['LDUR', 'STUR'].includes(instruction)) {
+      if (['LDUR', 'LDURB', 'LDURH', 'LDURSW', 'STUR', 'STURB', 'STURH', 'STURW'].includes(instruction)) {
         // D-type: LDUR Rt, [Rn, #offset]
         if (parts.length < 3) {
           errors.push({
@@ -232,6 +232,79 @@ const CodeEditor: React.FC = () => {
           errors.push({
             line: index + 1,
             message: `Memory address must be enclosed in brackets: ${memoryPart}`,
+            type: 'error'
+          });
+        }
+      }
+
+      if (['LSL', 'LSR'].includes(instruction)) {
+        // Shift instructions: LSL Rd, Rn, #shamt
+        if (parts.length !== 4) {
+          errors.push({
+            line: index + 1,
+            message: `${instruction} requires 3 operands: ${instruction} Rd, Rn, #shamt`,
+            type: 'error'
+          });
+          return;
+        }
+
+        // Check shift amount format
+        const shamt = parts[3];
+        if (!shamt.startsWith('#')) {
+          errors.push({
+            line: index + 1,
+            message: `Shift amount must start with #: ${shamt}`,
+            type: 'error'
+          });
+        }
+      }
+
+      if (['MOVZ', 'MOVK'].includes(instruction)) {
+        // Move instructions: MOVZ Rd, immediate [, LSL #shift]
+        if (parts.length < 3) {
+          errors.push({
+            line: index + 1,
+            message: `${instruction} requires at least 2 operands: ${instruction} Rd, immediate`,
+            type: 'error'
+          });
+          return;
+        }
+
+        // MOVZ/MOVK immediate values don't require # prefix
+        const immediate = parts[2];
+        const cleanImm = immediate.replace(',', '');
+        
+        // Check if it's a valid immediate (hex or decimal)
+        const isHex = cleanImm.startsWith('0x') || cleanImm.startsWith('0X');
+        const isDecimal = /^\d+$/.test(cleanImm);
+        const isHashPrefixed = cleanImm.startsWith('#');
+        
+        if (!isHex && !isDecimal && !isHashPrefixed) {
+          errors.push({
+            line: index + 1,
+            message: `Invalid immediate value: ${immediate}. Use decimal (123), hex (0x123), or #-prefixed values`,
+            type: 'error'
+          });
+        }
+      }
+
+      if (['LDXR', 'LDA'].includes(instruction)) {
+        // Special memory instructions
+        if (parts.length < 3) {
+          errors.push({
+            line: index + 1,
+            message: `${instruction} requires proper format`,
+            type: 'error'
+          });
+        }
+      }
+
+      if (instruction === 'STXR') {
+        // STXR Rs, Rt, [Rn]
+        if (parts.length < 4) {
+          errors.push({
+            line: index + 1,
+            message: `STXR requires 3 operands: STXR Rs, Rt, [Rn]`,
             type: 'error'
           });
         }
@@ -300,14 +373,14 @@ const CodeEditor: React.FC = () => {
       if (parts.length > 0) {
         const instruction = parts[0].toUpperCase();
         const validInstructions = [
-          'ADD', 'SUB', 'AND', 'ORR', 'EOR', 'LSL', 'LSR',
-          'ADDI', 'SUBI', 'ANDI', 'ORRI', 'EORI',
-          'LDUR', 'STUR', 'LDURB', 'STURB', 'LDURH', 'STURH', 'LDURSW',
+          'ADD', 'ADDS', 'SUB', 'SUBS', 'AND', 'ANDS', 'ORR', 'EOR', 'LSL', 'LSR',
+          'ADDI', 'ADDIS', 'SUBI', 'SUBIS', 'ANDI', 'ANDIS', 'ORRI', 'EORI',
+          'LDUR', 'LDURB', 'LDURH', 'LDURSW', 'STUR', 'STURB', 'STURH', 'STURW',
+          'LDA', 'LDXR', 'STXR',
           'B', 'BL', 'BR', 'CBZ', 'CBNZ',
           'B.EQ', 'B.NE', 'B.LT', 'B.LE', 'B.GT', 'B.GE',
           'B.MI', 'B.PL', 'B.VS', 'B.VC', 'B.HI', 'B.LS', 'B.AL',
-          'CMP', 'CMPI', 'ADDS', 'SUBS', 'ANDS',
-          'MOVZ', 'MOVK', 'NOP'
+          'CMP', 'CMPI', 'MOVZ', 'MOVK', 'MOV', 'NOP'
         ];
         
         if (validInstructions.includes(instruction)) {
@@ -341,7 +414,7 @@ const CodeEditor: React.FC = () => {
   };
 
   const parseAndLoadProgram = (code: string) => {
-    // Parse assembly code into instructions
+    // Parse assembly code into instructions while preserving labels
     const lines = code.split('\n')
       .map(line => {
         const trimmed = line.trim();
@@ -349,18 +422,66 @@ const CodeEditor: React.FC = () => {
         const withoutComment = trimmed.split(';')[0].trim();
         return withoutComment;
       })
-      .filter(line => line && !line.match(/^[a-zA-Z_][a-zA-Z0-9_]*:$/)); // Filter out empty lines and labels
+      .filter(line => line); // Only filter out empty lines, keep labels!
 
-    const instructions = lines.map((line, index) => ({
-      address: 0x400000 + index * 4,
-      machineCode: '00000000',
-      assembly: line.trim(), // Ensure assembly is trimmed
-      type: 'R' as const,
-      fields: { 
-        opcode: line.trim().split(/\s+/)[0] || 'NOP'
+    const instructions: any[] = [];
+    let instructionIndex = 0;
+
+    lines.forEach((line) => {
+      const trimmed = line.trim();
+      
+      // Check if this line is a label
+      const labelMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*):(.*)$/);
+      
+      if (labelMatch) {
+        // This line has a label
+        const labelName = labelMatch[1];
+        const remainingLine = labelMatch[2].trim();
+        
+        if (remainingLine) {
+          // Label followed by instruction on same line: "skip: ADDI X10, XZR, #200"
+          instructions.push({
+            address: 0x400000 + instructionIndex * 4,
+            machineCode: '00000000',
+            assembly: `${labelName}: ${remainingLine}`, // Preserve the label in assembly text
+            type: 'R' as const,
+            fields: { 
+              opcode: remainingLine.split(/\s+/)[0] || 'NOP'
+            }
+          });
+          instructionIndex++;
+        } else {
+          // Label on its own line: just "skip:"
+          // Store it as a special label entry that points to the next instruction
+          instructions.push({
+            address: 0x400000 + instructionIndex * 4,
+            machineCode: '00000000',
+            assembly: `${labelName}:`, // Keep label for reference
+            type: 'L' as const, // Special type for label-only lines
+            fields: { 
+              opcode: 'LABEL',
+              label: labelName
+            }
+          });
+          // Don't increment instructionIndex for label-only lines
+          // The next actual instruction will get this same address
+        }
+      } else if (trimmed) {
+        // Regular instruction line
+        instructions.push({
+          address: 0x400000 + instructionIndex * 4,
+          machineCode: '00000000',
+          assembly: trimmed,
+          type: 'R' as const,
+          fields: { 
+            opcode: trimmed.split(/\s+/)[0] || 'NOP'
+          }
+        });
+        instructionIndex++;
       }
-    }));
+    });
 
+    console.log('📋 Parsed instructions with labels preserved:', instructions);
     loadProgram(instructions);
   };
 
@@ -517,10 +638,13 @@ const CodeEditor: React.FC = () => {
         <details>
           <summary className="cursor-pointer font-medium">LEGv8 Quick Reference</summary>
           <div className="mt-2 space-y-1">
-            <div><strong>Arithmetic:</strong> ADD, SUB, ADDI, SUBI</div>
-            <div><strong>Logical:</strong> AND, ORR, EOR, ANDI, ORRI, EORI</div>
-            <div><strong>Memory:</strong> LDUR, STUR, LDURB, STURB</div>
-            <div><strong>Branch:</strong> B, B.EQ, B.NE, CBZ, CBNZ</div>
+            <div><strong>Arithmetic:</strong> ADD, ADDS, SUB, SUBS, ADDI, ADDIS, SUBI, SUBIS, CMP, CMPI</div>
+            <div><strong>Logical:</strong> AND, ANDS, ORR, EOR, ANDI, ANDIS, ORRI, EORI</div>
+            <div><strong>Shift:</strong> LSL, LSR</div>
+            <div><strong>Move:</strong> MOV Rd, Rm; MOVZ Rd, imm; MOVK Rd, imm</div>
+            <div><strong>Memory:</strong> LDUR, LDURB, LDURH, LDURSW, STUR, STURB, STURH, STURW</div>
+            <div><strong>Atomic:</strong> LDXR, STXR, LDA</div>
+            <div><strong>Branch:</strong> B, BL, BR, CBZ, CBNZ, B.EQ, B.NE, B.LT, B.LE, B.GT, B.GE</div>
             <div><strong>Registers:</strong> X0-X31, SP (X28), FP (X29), LR (X30), XZR (X31)</div>
             <div><strong>Comments:</strong> Use semicolon (;) for comments</div>
             <div><strong>Labels:</strong> label: (colon at end)</div>

@@ -25,7 +25,7 @@ const RegisterFile: React.FC = () => {
               >
                 <span className="font-bold">{regName}:</span>
                 <span className="font-mono">
-                  0x{value.toString(16).toUpperCase().padStart(8, '0')}
+                  0x{(value >>> 0).toString(16).toUpperCase().padStart(8, '0')}
                 </span>
               </div>
             );

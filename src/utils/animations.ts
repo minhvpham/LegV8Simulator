@@ -135,7 +135,7 @@ export class CPUAnimationController {
 
   // Animate value change with typewriter effect
   private animateValueChange(element: Element, newValue: number): void {
-    const hexValue = `0x${newValue.toString(16).toUpperCase().padStart(8, '0')}`;
+    const hexValue = `0x${(newValue >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
     let currentText = '';
     
     gsap.to({}, {

@@ -5,24 +5,48 @@ const RegisterMemoryViewer: React.FC = () => {
   const { cpu } = useSimulatorStore();
 
   const formatValue = (value: number): string => {
-    return `0x${value.toString(16).padStart(8, '0').toUpperCase()}`;
+    // Handle large numbers correctly
+    if (value < 0) {
+      // For negative numbers, convert to proper hex representation
+      return `0x${(value >>> 0).toString(16).padStart(8, '0').toUpperCase()}`;
+    }
+    // For positive numbers, handle both 32-bit and larger values
+    const hexStr = value.toString(16).toUpperCase();
+    const paddedHex = hexStr.padStart(8, '0');
+    return `0x${paddedHex}`;
   };
 
   const formatDecimal = (value: number): string => {
     return value.toString();
   };
 
-  // Get data memory as array for display
-  const dataMemoryArray = Array.from({ length: 32 }, (_, i) => ({
-    address: i * 4,
-    value: cpu.dataMemory.get(i * 4) || 0
-  }));
+  // Helper function to read 8 bytes from memory and combine them
+  const readMemoryWord = (baseAddress: number): number => {
+    let result = 0;
+    for (let i = 0; i < 8; i++) {
+      const byte = cpu.dataMemory.get(baseAddress + i) || 0;
+      result += byte * Math.pow(2, i * 8);
+    }
+    return result;
+  };
 
-  // Get stack memory (starting from SP and going downward)
-  const stackMemoryArray = Array.from({ length: 32 }, (_, i) => ({
-    address: 0x80000000 - i * 4,
-    value: cpu.dataMemory.get(0x80000000 - i * 4) || 0
-  }));
+  // Get data memory as array for display (8-byte words)
+  const dataMemoryArray = Array.from({ length: 32 }, (_, i) => {
+    const address = i * 8;
+    return {
+      address,
+      value: readMemoryWord(address)
+    };
+  });
+
+  // Get stack memory (starting from 0x80000000 and going up, 8-byte words)
+  const stackMemoryArray = Array.from({ length: 32 }, (_, i) => {
+    const address = 0x80000000 + i * 8;
+    return {
+      address,
+      value: readMemoryWord(address)
+    };
+  });
 
   return (
     <div className="bg-white border rounded-lg p-4">
@@ -139,9 +163,9 @@ const RegisterMemoryViewer: React.FC = () => {
           </div>
         </div>
 
-        {/* Stack Memory */}
+        {/* High Memory (0x80000000+) */}
         <div className="bg-red-50 border border-red-200 rounded p-3">
-          <h4 className="font-semibold text-red-800 mb-2">Stack Memory</h4>
+          <h4 className="font-semibold text-red-800 mb-2">High Memory (0x80000000+)</h4>
           <div className="space-y-1 max-h-64 overflow-y-auto">
             {stackMemoryArray.map((mem, index) => (
               <div key={index} className="flex justify-between items-center">

@@ -26,7 +26,7 @@ const DataMemory: React.FC = () => {
                   0x{address.toString(16).toUpperCase().padStart(4, '0')}:
                 </span>
                 <span className="font-mono text-xs">
-                  0x{value.toString(16).toUpperCase().padStart(8, '0')}
+                  0x{(value >>> 0).toString(16).toUpperCase().padStart(8, '0')}
                 </span>
               </div>
             ))}

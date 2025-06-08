@@ -41,6 +41,7 @@ export interface ControlSignals {
   aluSrc: boolean;
   aluOp: string;
   regWrite: boolean;
+  branchTaken: boolean;
 }
 
 export interface Instruction {
@@ -51,7 +52,7 @@ export interface Instruction {
   fields: InstructionFields;
 }
 
-export type InstructionType = 'R' | 'I' | 'D' | 'B' | 'CB';
+export type InstructionType = 'R' | 'I' | 'D' | 'B' | 'CB' | 'L';
 
 export interface InstructionFields {
   opcode?: string;
@@ -61,6 +62,7 @@ export interface InstructionFields {
   rd?: number;
   immediate?: number;
   address?: number;
+  label?: string;
 }
 
 export interface SimulatorState {
