@@ -1,235 +1,2732 @@
 import React, { useEffect, useRef } from 'react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import { animationController } from '../../utils/animations';
-import ProgramCounter from './ProgramCounter';
-import InstructionMemory from './InstructionMemory';
-import RegisterFile from './RegisterFile';
-import ALU from './ALU';
-import DataMemory from './DataMemory';
-import ControlUnit from './ControlUnit';
+import Rectangle from './BaseShape/Rectangle';
+import ALUShape from './BaseShape/ALUComponent';
+import Multiplexor from './BaseShape/Multiplexor';
+import { UpArrow, RightArrow, LeftArrow } from './BaseShape/Arrows';
+import { ANDGateHorizontal } from './BaseShape/ANDGate';
+import { ORGateHorizontal } from './BaseShape/ORGate';
+import { COLORS } from './BaseShape/constants';
+import { Ellipse, ComponentEllipse } from './BaseShape/Ellipse';
+import { VerticalSegment, HorizontalSegment } from './BaseShape/WireSegment';
+import DiagonalSlash from './BaseShape/DiagonalSlash';
 
 const CPUDatapath: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
   const { mode, cpu, animationSpeed } = useSimulatorStore();
 
   useEffect(() => {
-    // Set animation speed when it changes
     animationController.setSpeed(animationSpeed);
   }, [animationSpeed]);
 
   useEffect(() => {
-    // Clear animations when switching modes
     if (mode === 'realtime') {
       animationController.clear();
     }
   }, [mode]);
 
-  return (
-    <div className="relative w-full h-full bg-white rounded-lg shadow-lg p-4 overflow-hidden">
-      {/* CPU Architecture Diagram */}
-      <svg
-        ref={svgRef}
-        className="absolute inset-0 w-full h-full"
-        viewBox="0 0 1600 800"
-        preserveAspectRatio="xMidYMid meet"
+  // Reference dimensions from SingleCycleVis.java: 895x625
+  // Our container height is 700px, so we scale to fit
+  const CANVAS_WIDTH_REF = 895;
+  const CANVAS_HEIGHT_REF = 625;
+  const TARGET_HEIGHT = 650; // Leave some margin in the 700px container
+  const scale = TARGET_HEIGHT / CANVAS_HEIGHT_REF;
+  const scaledWidth = CANVAS_WIDTH_REF * scale;
+
+  // Component coordinates from SingleCycleVis.java, scaled
+  const components = {
+    PC: {
+      x: 20 * scale,
+      y: (355 + 120/10 - 60/2) * scale, // PC_COORDS calculation from Java
+      width: 30 * scale,
+      height: 60 * scale
+    },
+    InsMem: {
+      x: 80 * scale,
+      y: 335 * scale,
+      width: 80 * scale,
+      height: 120 * scale
+    },
+    RegFile: {
+      x: 335 * scale,
+      y: 325 * scale,
+      width: 110 * scale,
+      height: 140 * scale
+    },
+    DataMem: {
+      x: 715 * scale,
+      y: 385 * scale,
+      width: 90 * scale,
+      height: 130 * scale
+    },
+    ALUMain: {
+      x: 540 * scale,
+      y: 340 * scale,
+      width: 75 * scale,
+      height: 110 * scale
+    },
+    ALUPC: {
+      x: 150 * scale,
+      y: 20 * scale,
+      width: 45 * scale,
+      height: 75 * scale
+    },
+    ALUBranch: {
+      x: 595 * scale,
+      y: (60 + 80 - 25/2 - 90/2) * scale, // ALU_BRANCH_COORDS calculation
+      width: 70 * scale,
+      height: 90 * scale
+    },
+    Control: {
+      x: 290 * scale,
+      y: 155 * scale,
+      width: 60 * scale,
+      height: 160 * scale
+    },
+    ALUControl: {
+      x: 510 * scale,
+      y: 515 * scale,
+      width: 55 * scale,
+      height: 70 * scale
+    },
+    SignExtend: {
+      x: 375 * scale,
+      y: 500 * scale,
+      width: 55 * scale,
+      height: 70 * scale
+    },
+    ShiftLeft2: {
+      x: 525 * scale,
+      y: (60 + 80 - 25/2 + 13*90/16 - 50/2 - 50) * scale, // SHIFT_LEFT2_COORDS calculation
+      width: 45 * scale,
+      height: 50 * scale
+    },
+    // Flags component
+    Flags: {
+      x: 535 * scale,
+      y: 310 * scale,
+      width: 88 * scale,
+      height: 20 * scale
+    },
+    FlagAND: {
+      x: 645 * scale,
+      y: (310 + 20/2 - 4*20/5) * scale,
+      width: 20 * scale,
+      height: 20 * scale
+    },
+    ZeroAND: {
+      x: 715 * scale,
+      y: (310 + 20/2 - 4*20/5) * scale,
+      width: 20 * scale,
+      height: 20 * scale
+    },
+    BranchOR: {
+      x: 765 * scale,
+      y: (155 + 2.5 + (160-2*2.5)/10 - 25/5) * scale,
+      width: 30 * scale,
+      height: 25 * scale
+    },
+    // MUXes with exact coordinates
+    MuxPC: {
+      x: 800 * scale,
+      y: (20 + 75/2 - 25/2) * scale, // MUX_PC_COORDS calculation
+      width: 25 * scale,
+      height: 80 * scale
+    },
+    MuxReg2Loc: {
+      x: 295 * scale,
+      y: (325 + 4*140/10 - 65/2) * scale, // MUX_REG2LOC_COORDS calculation
+      width: 25 * scale,
+      height: 65 * scale
+    },
+    MuxReadReg: {
+      x: 495 * scale,
+      y: (340 + 13*110/16 - 65/2) * scale, // MUX_READ_REG_COORDS calculation
+      width: 25 * scale,
+      height: 65 * scale
+    },
+    MuxReadMem: {
+      x: 835 * scale,
+      y: 420 * scale,
+      width: 25 * scale,
+      height: 65 * scale
+    }
+  };
+
+  // Vertical lines calculations from Java
+  const verticalLines = {
+    PC_PCALU_X: (20 + 30 + (80 - 20 - 30)/3) * scale,
+    INS_MEM_X: (80 + 80 + (335 - 80 - 80)/12) * scale,
+    SHIFT2VERT_X: (335 + 110 + 3*(495 - 335 - 110)/5) * scale,
+    ZERO_AND_VERT_X: (540 + 75 + 4*(715 - 540 - 75)/5) * scale
+  };
+
+  // Instruction text coordinates
+  const instructionTextCoords = {
+    x: 20 * scale,
+    y: (515 + 70) * scale
+  };
+  // Control signal constants from Java
+  const CONTROL_OFFSET = 2.5 * scale;
+  const CONTROL_PADDING = ((160 - 2 * 2.5) / 10) * scale;  // (CONTROL_HEIGHT - 2*CONTROL_OFFSET)/10 from Java
+
+  // Helper function to calculate ellipse intersection point
+  const getEllipseXIntersect = (xOffset: number, y: number, xRadius: number, yRadius: number): number => {
+    return xOffset + xRadius + xRadius * Math.sqrt(1 - ((y * y) / (yRadius * yRadius)));
+  };
+
+  // Control signal drawing functions converted from Java SingleCycleVis.java
+  const ControlSignalComponents = () => (
+    <g>
+      {/* Reg2Loc Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET, 
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET}
+        xEnd={components.Control.x + components.Control.width}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.Control.x + components.Control.width}
+        yStart={components.Control.y + CONTROL_OFFSET}
+        yEnd={components.Control.y + CONTROL_OFFSET - 2*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width + (verticalLines.INS_MEM_X - components.InsMem.x - components.InsMem.width)/2}
+        y={components.Control.y + CONTROL_OFFSET - 2*CONTROL_PADDING}
+        xEnd={components.Control.x + components.Control.width}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.InsMem.x + components.InsMem.width + (verticalLines.INS_MEM_X - components.InsMem.x - components.InsMem.width)/2}
+        yStart={components.RegFile.y + 9*components.RegFile.height/10}
+        yEnd={components.Control.y + CONTROL_OFFSET - 2*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width + (verticalLines.INS_MEM_X - components.InsMem.x - components.InsMem.width)/2}
+        y={components.RegFile.y + 9*components.RegFile.height/10}
+        xEnd={components.MuxReg2Loc.x + components.MuxReg2Loc.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.MuxReg2Loc.x + components.MuxReg2Loc.width/2}
+        yStart={components.RegFile.y + 9*components.RegFile.height/10}
+        yEnd={components.MuxReg2Loc.y + components.MuxReg2Loc.height}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* Unconditional Branch Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + CONTROL_PADDING}
+        xEnd={components.BranchOR.x + 3}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* Flag Branch Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 2*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 2*CONTROL_PADDING}
+        xEnd={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
+        yStart={components.FlagAND.y + components.FlagAND.height/5}
+        yEnd={components.Control.y + CONTROL_OFFSET + 2*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
+        y={components.FlagAND.y + components.FlagAND.height/5}
+        xEnd={components.FlagAND.x}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* Zero Branch Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 3*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
+        xEnd={verticalLines.ZERO_AND_VERT_X}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.ZERO_AND_VERT_X}
+        yStart={components.ZeroAND.y + components.ZeroAND.height/5}
+        yEnd={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.ZERO_AND_VERT_X}
+        y={components.ZeroAND.y + components.ZeroAND.height/5}
+        xEnd={components.ZeroAND.x}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* MemRead Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 4*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width}
+        yStart={components.DataMem.y + components.DataMem.height + components.PC.width}
+        yEnd={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.DataMem.x + components.DataMem.width/2}
+        y={components.DataMem.y + components.DataMem.height + components.PC.width}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.DataMem.x + components.DataMem.width/2}
+        yStart={components.DataMem.y + components.DataMem.height + components.PC.width}
+        yEnd={components.DataMem.y + components.DataMem.height}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* MemToReg Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 5*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 5*CONTROL_PADDING}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.MuxReadMem.x + components.MuxReadMem.width/2}
+        yStart={components.MuxReadMem.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 5*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* MemWrite Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 6*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
+        xEnd={components.DataMem.x + components.DataMem.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.DataMem.x + components.DataMem.width/2}
+        yStart={components.DataMem.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* FlagWrite Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 7*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
+        xEnd={components.Flags.x + components.Flags.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.Flags.x + components.Flags.width/2}
+        yStart={components.Flags.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* ALUSrc Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 8*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
+        xEnd={components.MuxReadReg.x + components.MuxReadReg.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.MuxReadReg.x + components.MuxReadReg.width/2}
+        yStart={components.MuxReadReg.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* ALUOp Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 9*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 9*CONTROL_PADDING}
+        xEnd={components.RegFile.x + components.RegFile.width + 2*(components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+      />
+      <VerticalSegment 
+        x={components.RegFile.x + components.RegFile.width + 2*(components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        yStart={components.ALUControl.y + 1.375*components.ALUControl.height}
+        yEnd={components.Control.y + CONTROL_OFFSET + 9*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+      />
+      <HorizontalSegment 
+        xStart={components.RegFile.x + components.RegFile.width + 2*(components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        y={components.ALUControl.y + 1.375*components.ALUControl.height}
+        xEnd={components.ALUControl.x + components.ALUControl.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+      />
+      <VerticalSegment 
+        x={components.ALUControl.x + components.ALUControl.width/2}
+        yStart={components.ALUControl.y + 1.375*components.ALUControl.height}
+        yEnd={components.ALUControl.y + components.ALUControl.height}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+        // hasArrow={true}
+      />
+
+      {/* RegWrite Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 10*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 10*CONTROL_PADDING}
+        xEnd={components.RegFile.x + components.RegFile.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.RegFile.x + components.RegFile.width/2}
+        yStart={components.RegFile.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 10*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* BranchOr -> MuxPC Signal */}
+      <HorizontalSegment 
+        xStart={components.BranchOR.x + components.BranchOR.width}
+        y={components.BranchOR.y + components.BranchOR.height/2}
+        xEnd={components.MuxPC.x + components.MuxPC.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.MuxPC.x + components.MuxPC.width/2}
+        yStart={components.BranchOR.y + components.BranchOR.height/2}
+        yEnd={components.MuxPC.y + components.MuxPC.height}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* Flag -> FlagAnd Signal */}
+      <HorizontalSegment 
+        xStart={components.Flags.x + components.Flags.width}
+        y={components.Flags.y + components.Flags.height/2}
+        xEnd={components.FlagAND.x}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* FlagAnd -> BranchOR Signal */}
+      <HorizontalSegment 
+        xStart={components.FlagAND.x + components.FlagAND.width}
+        y={components.FlagAND.y + components.FlagAND.height/2}
+        xEnd={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
+        yStart={components.FlagAND.y + components.FlagAND.height/2}
+        yEnd={components.BranchOR.y + components.BranchOR.height/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
+        y={components.BranchOR.y + components.BranchOR.height/2}
+        xEnd={components.BranchOR.x + 5}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* ALUMain -> ZeroAnd Signal */}
+      <HorizontalSegment 
+        xStart={components.ALUMain.x + components.ALUMain.width}
+        y={components.ALUMain.y + 3*components.ALUMain.height/8}
+        xEnd={verticalLines.ZERO_AND_VERT_X}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.ZERO_AND_VERT_X}
+        yStart={components.ALUMain.y + 3*components.ALUMain.height/8}
+        yEnd={components.ZeroAND.y + 4*components.ZeroAND.height/5}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.ZERO_AND_VERT_X}
+        y={components.ZeroAND.y + 4*components.ZeroAND.height/5}
+        xEnd={components.ZeroAND.x}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* ZeroAnd -> BranchOR Signal */}
+      <HorizontalSegment 
+        xStart={components.ZeroAND.x + components.ZeroAND.width}
+        y={components.ZeroAND.y + components.ZeroAND.height/2}
+        xEnd={components.ZeroAND.x + components.ZeroAND.width + (components.DataMem.x + components.DataMem.width/2 - components.ZeroAND.x - components.ZeroAND.width)/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <VerticalSegment 
+        x={components.ZeroAND.x + components.ZeroAND.width + (components.DataMem.x + components.DataMem.width/2 - components.ZeroAND.x - components.ZeroAND.width)/2}
+        yStart={components.ZeroAND.y + components.ZeroAND.height/2}
+        yEnd={components.BranchOR.y + 4*components.BranchOR.height/5}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />
+      <HorizontalSegment 
+        xStart={components.ZeroAND.x + components.ZeroAND.width + (components.DataMem.x + components.DataMem.width/2 - components.ZeroAND.x - components.ZeroAND.width)/2}
+        y={components.BranchOR.y + 4*components.BranchOR.height/5}
+        xEnd={components.BranchOR.x + 3}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />
+
+      {/* ALUControl -> ALUMain Signal */}
+      <HorizontalSegment 
+        xStart={components.ALUControl.x + components.ALUControl.width}
+        y={components.ALUControl.y + components.ALUControl.height/2}
+        xEnd={components.ALUMain.x + components.ALUMain.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+      />
+      <VerticalSegment 
+        x={components.ALUMain.x + components.ALUMain.width/2}
+        yStart={components.ALUControl.y + components.ALUControl.height/2}
+        yEnd={components.ALUMain.y + 7*components.ALUMain.height/8}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        strokeWidth={3.5}
+        // hasArrow={true}
+      />
+
+    </g>
+  );
+
+  // Wire drawing functions based on Java code
+  const WireComponents = () => (
+    <g>
+      {/* Data Wires (black) */}
+      
+      {/* 4 -> ALUPC */}
+      <RightArrow 
+        xTail={verticalLines.PC_PCALU_X + 2*(components.ALUPC.x - verticalLines.PC_PCALU_X)/3}
+        y={components.ALUPC.y + 13*components.ALUPC.height/16}
+        xHead={components.ALUPC.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* PC -> InsMem */}
+      <RightArrow 
+        xTail={components.PC.x + components.PC.width}
+        y={components.PC.y + components.PC.height/2}
+        xHead={components.InsMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* PC -> ALUPC */}
+      <RightArrow 
+        xTail={verticalLines.PC_PCALU_X}
+        y={components.ALUPC.y + 3*components.ALUPC.height/16}
+        xHead={components.ALUPC.x}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={components.PC.x + components.PC.width}
+        y={components.PC.y + components.PC.height/2}
+        xEnd={verticalLines.PC_PCALU_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.PC_PCALU_X}
+        yStart={components.PC.y + components.PC.height/2}
+        yEnd={components.ALUPC.y + 3*components.ALUPC.height/16}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+
+      {/* PC -> ALUBranch */}
+      <HorizontalSegment 
+        xStart={components.PC.x + components.PC.width}
+        y={components.PC.y + components.PC.height/2}
+        xEnd={verticalLines.PC_PCALU_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.PC_PCALU_X}
+        yStart={components.PC.y + components.PC.height/2}
+        yEnd={components.Control.y}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.PC_PCALU_X}
+        y={components.Control.y}
+        xEnd={(components.InsMem.x + components.InsMem.width + components.RegFile.x)/2}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <VerticalSegment 
+        x={(components.InsMem.x + components.InsMem.width + components.RegFile.x)/2}
+        yStart={components.Control.y}
+        yEnd={components.ALUBranch.y + 3*components.ALUBranch.height/16}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={(components.InsMem.x + components.InsMem.width + components.RegFile.x)/2}
+        y={components.ALUBranch.y + 3*components.ALUBranch.height/16}
+        xHead={components.ALUBranch.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> Control */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.Control.y + components.Control.height/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X}
+        y={components.Control.y + components.Control.height/2}
+        xHead={components.Control.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> RegFileRead1 */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.RegFile.y + components.RegFile.height/10}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X}
+        y={components.RegFile.y + components.RegFile.height/10}
+        xHead={components.RegFile.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> RegFileWrite */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.RegFile.y + 7*components.RegFile.height/10}
+        color={COLORS.BLACK}
+        joinStart={true}
+        joinEnd={true}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X}
+        y={components.RegFile.y + 7*components.RegFile.height/10}
+        xHead={components.RegFile.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> MuxReg2Loc1 */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.RegFile.y + 7*components.RegFile.height/10}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.INS_MEM_X}
+        y={components.RegFile.y + 7*components.RegFile.height/10}
+        xEnd={verticalLines.INS_MEM_X + (components.RegFile.x - verticalLines.INS_MEM_X)/2}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X + (components.RegFile.x - verticalLines.INS_MEM_X)/2}
+        yStart={components.RegFile.y + 7*components.RegFile.height/10}
+        yEnd={components.MuxReg2Loc.y + components.MuxReg2Loc.height - components.MuxReg2Loc.width/2}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X + (components.RegFile.x - verticalLines.INS_MEM_X)/2}
+        y={components.MuxReg2Loc.y + components.MuxReg2Loc.height - components.MuxReg2Loc.width/2}
+        xHead={components.MuxReg2Loc.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> MuxReg2Loc2 */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.MuxReg2Loc.y + components.MuxReg2Loc.width/2}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X}
+        y={components.MuxReg2Loc.y + components.MuxReg2Loc.width/2}
+        xHead={components.MuxReg2Loc.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> SignExtend */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.SignExtend.y + components.SignExtend.height/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={verticalLines.INS_MEM_X}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        xHead={components.SignExtend.x}
+        color={COLORS.BLACK}
+      />
+      <DiagonalSlash 
+        x={components.RegFile.x + (components.SignExtend.x - components.RegFile.x)/2 - 4}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        color={COLORS.BLACK}
+      />
+
+      {/* InsMem -> ALUControl */}
+      <HorizontalSegment 
+        xStart={components.InsMem.x + components.InsMem.width}
+        y={components.InsMem.y + components.InsMem.height/2}
+        xEnd={verticalLines.INS_MEM_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.INS_MEM_X}
+        yStart={components.InsMem.y + components.InsMem.height/2}
+        yEnd={components.SignExtend.y + components.SignExtend.height/2}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.INS_MEM_X}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        xEnd={components.RegFile.x}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={components.RegFile.x}
+        yStart={components.ALUControl.y + 1.25*components.ALUControl.height}
+        yEnd={components.SignExtend.y + components.SignExtend.height/2}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={components.RegFile.x}
+        y={components.ALUControl.y + 1.25*components.ALUControl.height}
+        xEnd={verticalLines.SHIFT2VERT_X}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={verticalLines.SHIFT2VERT_X}
+        yStart={components.ALUControl.y + 1.25*components.ALUControl.height}
+        yEnd={components.ALUControl.y + components.ALUControl.height/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={verticalLines.SHIFT2VERT_X}
+        y={components.ALUControl.y + components.ALUControl.height/2}
+        xHead={components.ALUControl.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* RegFile -> ALUMain */}
+      <RightArrow 
+        xTail={components.RegFile.x + components.RegFile.width}
+        y={components.ALUMain.y + 3*components.ALUMain.height/16}
+        xHead={components.ALUMain.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* RegFile -> MuxReadRegData */}
+      <RightArrow 
+        xTail={components.RegFile.x + components.RegFile.width}
+        y={components.MuxReadReg.y + components.MuxReadReg.width/2}
+        xHead={components.MuxReadReg.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* RegFile -> DataMem */}
+      <HorizontalSegment 
+        xStart={components.RegFile.x + components.RegFile.width}
+        y={components.MuxReadReg.y + components.MuxReadReg.width/2}
+        xEnd={components.RegFile.x + components.RegFile.width + (components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.RegFile.x + components.RegFile.width + (components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        yStart={components.DataMem.y + 5*components.DataMem.height/6}
+        yEnd={components.MuxReadReg.y + components.MuxReadReg.width/2}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <RightArrow 
+        xTail={components.RegFile.x + components.RegFile.width + (components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
+        y={components.DataMem.y + 5*components.DataMem.height/6}
+        xHead={components.DataMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* DataMem -> MuxReadMemData */}
+      <RightArrow 
+        xTail={components.DataMem.x + components.DataMem.width}
+        y={components.MuxReadMem.y + components.MuxReadMem.width/2}
+        xHead={components.MuxReadMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUPC -> MuxPC */}
+      <HorizontalSegment 
+        xStart={components.ALUPC.x + components.ALUPC.width}
+        y={components.ALUPC.y + components.ALUPC.height/2}
+        xEnd={components.ALUPC.x + components.ALUPC.width + (components.ALUBranch.x - components.ALUPC.x - components.ALUPC.width)/2}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.ALUPC.x + components.ALUPC.width + (components.ALUBranch.x - components.ALUPC.x - components.ALUPC.width)/2}
+        yStart={components.ALUPC.y + components.ALUPC.height/2}
+        yEnd={components.MuxPC.y + components.MuxPC.width/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={components.ALUPC.x + components.ALUPC.width + (components.ALUBranch.x - components.ALUPC.x - components.ALUPC.width)/2}
+        y={components.MuxPC.y + components.MuxPC.width/2}
+        xHead={components.MuxPC.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUBranch -> MuxPC */}
+      <RightArrow 
+        xTail={components.ALUBranch.x + components.ALUBranch.width}
+        y={components.ALUBranch.y + components.ALUBranch.height/2}
+        xHead={components.MuxPC.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUMain -> Flags */}
+      <UpArrow 
+        x={components.ALUMain.x + components.ALUMain.width/2}
+        yTail={components.ALUMain.y + components.ALUMain.height/8}
+        yHead={components.Flags.y + components.Flags.height}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUMain -> DataMem */}
+      <RightArrow 
+        xTail={components.ALUMain.x + components.ALUMain.width}
+        y={components.ALUMain.y + 5*components.ALUMain.height/8}
+        xHead={components.DataMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* MuxPC -> PC */}
+      <HorizontalSegment 
+        xStart={components.MuxPC.x + components.MuxPC.width}
+        y={components.MuxPC.y + components.MuxPC.height/2}
+        xEnd={components.MuxPC.x + components.MuxPC.width + components.ALUPC.width}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.MuxPC.x + components.MuxPC.width + components.ALUPC.width}
+        yStart={components.MuxPC.y + components.MuxPC.height/2}
+        yEnd={components.ALUPC.y - components.ALUPC.height/4}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={components.PC.x - components.PC.width/2}
+        y={components.ALUPC.y - components.ALUPC.height/4}
+        xEnd={components.MuxPC.x + components.MuxPC.width + components.ALUPC.width}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.PC.x - components.PC.width/2}
+        yStart={components.PC.y + components.PC.height/2}
+        yEnd={components.ALUPC.y - components.ALUPC.height/4}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={components.PC.x - components.PC.width/2}
+        y={components.PC.y + components.PC.height/2}
+        xHead={components.PC.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* MuxReg2Loc -> RegFileRead2 */}
+      <RightArrow 
+        xTail={components.MuxReg2Loc.x + components.MuxReg2Loc.width}
+        y={components.MuxReg2Loc.y + components.MuxReg2Loc.height/2}
+        xHead={components.RegFile.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* MuxReadRegData -> ALUMain */}
+      <RightArrow 
+        xTail={components.MuxReadReg.x + components.MuxReadReg.width}
+        y={components.MuxReadReg.y + components.MuxReadReg.height/2}
+        xHead={components.ALUMain.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* SignExtend -> MuxReadRegData */}
+      <HorizontalSegment 
+        xStart={components.SignExtend.x + components.SignExtend.width}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        xEnd={verticalLines.SHIFT2VERT_X}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={verticalLines.SHIFT2VERT_X}
+        yStart={components.SignExtend.y + components.SignExtend.height/2}
+        yEnd={components.MuxReadReg.y + components.MuxReadReg.height - components.MuxReadReg.width/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={verticalLines.SHIFT2VERT_X}
+        y={components.MuxReadReg.y + components.MuxReadReg.height - components.MuxReadReg.width/2}
+        xHead={components.MuxReadReg.x}
+        color={COLORS.BLACK}
+      />
+      <DiagonalSlash 
+        x={components.RegFile.x + components.RegFile.width}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        color={COLORS.BLACK}
+      />
+
+      {/* SignExtend -> ShiftLeft2 */}
+      <HorizontalSegment 
+        xStart={components.SignExtend.x + components.SignExtend.width}
+        y={components.SignExtend.y + components.SignExtend.height/2}
+        xEnd={verticalLines.SHIFT2VERT_X}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={verticalLines.SHIFT2VERT_X}
+        yStart={components.SignExtend.y + components.SignExtend.height/2}
+        yEnd={components.ShiftLeft2.y + components.ShiftLeft2.height/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={verticalLines.SHIFT2VERT_X}
+        y={components.ShiftLeft2.y + components.ShiftLeft2.height/2}
+        xHead={components.ShiftLeft2.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ShiftLeft2 -> ALUBranch */}
+      <RightArrow 
+        xTail={components.ShiftLeft2.x + components.ShiftLeft2.width}
+        y={components.ALUBranch.y + 13*components.ALUBranch.height/16}
+        xHead={components.ALUBranch.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* MuxReadMemData -> RegFile (Write Data) */}
+      {/* Converted from Java drawMuxReadMemData_RegFile function */}
+      <HorizontalSegment 
+        xStart={components.MuxReadMem.x + components.MuxReadMem.width}
+        y={components.MuxReadMem.y + components.MuxReadMem.height/2}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width/2}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width/2}
+        yStart={components.ALUControl.y + 1.5*components.ALUControl.height}
+        yEnd={components.MuxReadMem.y + components.MuxReadMem.height/2}
+        color={COLORS.BLACK}
+      />
+      <HorizontalSegment 
+        xStart={components.MuxReg2Loc.x + components.MuxReg2Loc.width}
+        y={components.ALUControl.y + 1.5*components.ALUControl.height}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width/2}
+        color={COLORS.BLACK}
+      />
+      <VerticalSegment 
+        x={components.MuxReg2Loc.x + components.MuxReg2Loc.width}
+        yStart={components.ALUControl.y + 1.5*components.ALUControl.height}
+        yEnd={components.RegFile.y + 9*components.RegFile.height/10}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={components.MuxReg2Loc.x + components.MuxReg2Loc.width}
+        y={components.RegFile.y + 9*components.RegFile.height/10}
+        xHead={components.RegFile.x}
+        color={COLORS.BLACK}
+      />
+    </g>
+  );
+  // Individual component drawing functions converted from Java SingleCycleVis.java
+  const drawPC = (highlight: boolean) => (
+    <g>
+      <Rectangle 
+        x={components.PC.x}
+        y={components.PC.y}
+        width={components.PC.width}
+        height={components.PC.height}
+        fill={highlight ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={2}
+      />
+      <text 
+        x={components.PC.x + components.PC.width/2}
+        y={components.PC.y + components.PC.height/2}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
       >
-        {/* Background grid */}
-        <defs>
-          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#f1f5f9" strokeWidth="1"/>
-          </pattern>
-          
-          {/* Arrow marker */}
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" 
-                  refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#374151" />
-          </marker>
-          
-          {/* Active arrow marker */}
-          <marker id="arrowhead-active" markerWidth="10" markerHeight="7" 
-                  refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6" />
-          </marker>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" opacity="0.3" />
+        PC
+      </text>
+    </g>
+  );
 
-        {/* Data Paths */}
-        {/* PC to Instruction Memory */}
-        <path d="M 140 300 L 200 300" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* PC to PC+4 Adder */}
-        <path d="M 100 260 L 100 200 L 180 200" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* PC+4 output */}
-        <path d="M 240 200 L 1400 200 L 1400 280 L 1380 280" stroke="#374151" strokeWidth="2" fill="none" />
-        
-        {/* PC MUX to PC */}
-        <path d="M 1340 280 L 60 280 L 60 300 L 80 300" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Instruction Memory to Control Unit */}
-        <path d="M 320 280 L 400 280 L 400 150" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Instruction fields to Register File */}
-        <path d="M 280 320 L 280 380 L 400 380" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Register File outputs */}
-        <path d="M 580 380 L 680 380" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        <path d="M 580 420 L 620 420" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* ALU Source MUX */}
-        <path d="M 660 420 L 680 420" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Sign Extend to MUX */}
-        <path d="M 480 500 L 640 500 L 640 440" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* ALU to Data Memory */}
-        <path d="M 780 400 L 900 400" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Data Memory to Write Back MUX */}
-        <path d="M 1080 400 L 1200 400 L 1200 380 L 1220 380" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* ALU to Write Back MUX */}
-        <path d="M 730 380 L 1220 380" stroke="#374151" strokeWidth="2" fill="none" />
-        
-        {/* Write Back MUX to Register File */}
-        <path d="M 1260 380 L 1300 380 L 1300 500 L 380 500 L 380 440" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Branch calculation */}
-        <path d="M 480 480 L 600 480 L 600 240 L 680 240" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        <path d="M 720 240 L 800 240 L 800 200" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        <path d="M 860 200 L 1360 200 L 1360 260 L 1380 260" stroke="#374151" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />
-        
-        {/* Control signals (dashed blue lines) */}
-        <path d="M 500 150 L 500 360" stroke="#3B82F6" strokeWidth="2" strokeDasharray="5,5" fill="none" />
-        <path d="M 520 150 L 520 320 L 640 320 L 640 400" stroke="#3B82F6" strokeWidth="2" strokeDasharray="5,5" fill="none" />
-        <path d="M 540 150 L 540 300 L 990 300 L 990 380" stroke="#3B82F6" strokeWidth="2" strokeDasharray="5,5" fill="none" />
-        <path d="M 560 150 L 560 280 L 1240 280 L 1240 360" stroke="#3B82F6" strokeWidth="2" strokeDasharray="5,5" fill="none" />
-        <path d="M 480 150 L 480 180 L 1360 180 L 1360 240" stroke="#3B82F6" strokeWidth="2" strokeDasharray="5,5" fill="none" />
-      </svg>
+  const drawInsMem = (highlightLeft: boolean, highlightRight: boolean) => (
+    <g>
+      <Rectangle 
+        x={components.InsMem.x}
+        y={components.InsMem.y}
+        width={components.InsMem.width}
+        height={components.InsMem.height}
+        fill={(highlightLeft || highlightRight) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={2}
+      />
+      <text 
+        x={components.InsMem.x + components.InsMem.width/2}
+        y={components.InsMem.y + components.InsMem.height/2 + 30}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Instruction
+      </text>
+      <text 
+        x={components.InsMem.x + components.InsMem.width/2}
+        y={components.InsMem.y + components.InsMem.height/2 + 50}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Memory
+      </text>
+    </g>
+  );
 
-      {/* CPU Components positioned accurately */}
-      <div className="relative z-10 w-full h-full">
-        
-        {/* Program Counter */}
-        <div className="absolute" style={{ left: '80px', top: '280px', width: '60px', height: '40px' }}>
-          <ProgramCounter />
-        </div>
+  const drawRegFile = (highlightLeft: boolean, highlightRight: boolean) => (
+    <g>
+      <Rectangle 
+        x={components.RegFile.x}
+        y={components.RegFile.y}
+        width={components.RegFile.width}
+        height={components.RegFile.height}
+        fill={(highlightLeft || highlightRight) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={2}
+      />
+      <text 
+        x={components.RegFile.x + components.RegFile.width/2}
+        y={components.RegFile.y + components.RegFile.height/2 - 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Register
+      </text>
+      <text 
+        x={components.RegFile.x + components.RegFile.width/2}
+        y={components.RegFile.y + components.RegFile.height/2 + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        File
+      </text>
+    </g>
+  );
 
-        {/* PC+4 Adder */}
-        <div className="absolute" style={{ left: '180px', top: '180px', width: '60px', height: '40px' }}>
-          <div className="w-full h-full bg-green-100 border-2 border-green-400 rounded flex items-center justify-center">
-            <svg width="40" height="25" viewBox="0 0 40 25">
-              <polygon points="5,12.5 15,5 35,5 35,20 15,20" fill="#dcfce7" stroke="#16a34a" strokeWidth="2"/>
-              <text x="20" y="15" textAnchor="middle" fontSize="8" fill="#16a34a">+4</text>
-            </svg>
-          </div>
-        </div>
+  const drawDataMem = (highlightLeft: boolean, highlightRight: boolean) => (
+    <g>
+      <Rectangle 
+        x={components.DataMem.x}
+        y={components.DataMem.y}
+        width={components.DataMem.width}
+        height={components.DataMem.height}
+        fill={(highlightLeft || highlightRight) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={2}
+      />
+      <text 
+        x={components.DataMem.x + components.DataMem.width/2}
+        y={components.DataMem.y + components.DataMem.height/2 - 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Data
+      </text>
+      <text 
+        x={components.DataMem.x + components.DataMem.width/2}
+        y={components.DataMem.y + components.DataMem.height/2 + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={(highlightLeft || highlightRight) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Memory
+      </text>
+    </g>
+  );
+  const drawALUPC = (highlight: boolean) => (
+    <g>
+      <ALUShape 
+        x={components.ALUPC.x}
+        y={components.ALUPC.y}
+        width={components.ALUPC.width}
+        height={components.ALUPC.height}
+        stroke={COLORS.BLACK}
+        highlight={highlight}
+      />
+      {/* <text 
+        x={components.ALUPC.x + components.ALUPC.width/2}
+        y={components.ALUPC.y + components.ALUPC.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Add
+      </text>
+      <text 
+        x={components.ALUPC.x + components.ALUPC.width/2}
+        y={components.ALUPC.y + components.ALUPC.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        4
+      </text> */}
+    </g>
+  );
 
-        {/* Instruction Memory */}
-        <div className="absolute" style={{ left: '200px', top: '260px', width: '120px', height: '80px' }}>
-          <InstructionMemory />
-        </div>
+  const drawALUBranch = (highlight: boolean) => (
+    <g>
+      <ALUShape 
+        x={components.ALUBranch.x}
+        y={components.ALUBranch.y}
+        width={components.ALUBranch.width}
+        height={components.ALUBranch.height}
+        stroke={COLORS.BLACK}
+        highlight={highlight}
+      />
+      {/* <text 
+        x={components.ALUBranch.x + components.ALUBranch.width/2}
+        y={components.ALUBranch.y + components.ALUBranch.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Add
+      </text> */}
+    </g>
+  );
 
-        {/* Control Unit */}
-        <div className="absolute" style={{ left: '400px', top: '80px', width: '200px', height: '70px' }}>
-          <ControlUnit />
-        </div>
+  const drawALUMain = (highlight: boolean) => (
+    <g>
+      <ALUShape 
+        x={components.ALUMain.x}
+        y={components.ALUMain.y}
+        width={components.ALUMain.width}
+        height={components.ALUMain.height}
+        stroke={COLORS.BLACK}
+        highlight={highlight}
+      />
+      <text 
+        x={components.ALUMain.x + components.ALUMain.width/2}
+        y={components.ALUMain.y + components.ALUMain.height/2}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        ALU
+      </text>
+    </g>
+  );
 
-        {/* Register File */}
-        <div className="absolute" style={{ left: '400px', top: '360px', width: '180px', height: '80px' }}>
-          <RegisterFile />
-        </div>
+  const drawMuxPC = (highlightTop: boolean, highlightBottom: boolean) => (
+    <g>
+      <Multiplexor 
+        x={components.MuxPC.x}
+        y={components.MuxPC.y}
+        width={components.MuxPC.width}
+        height={components.MuxPC.height}
+        stroke={COLORS.BLACK}
+        highlightTop={highlightTop}
+        highlightBottom={highlightBottom}
+      />
+    </g>
+  );
 
-        {/* Sign Extend */}
-        <div className="absolute" style={{ left: '400px', top: '480px', width: '80px', height: '40px' }}>
-          <div className="w-full h-full bg-blue-100 border-2 border-blue-400 rounded flex items-center justify-center text-xs font-bold">
-            Sign Extend
-          </div>
-        </div>
+  const drawMuxReg2Loc = (highlightTop: boolean, highlightBottom: boolean) => (
+    <g>
+      <Multiplexor 
+        x={components.MuxReg2Loc.x}
+        y={components.MuxReg2Loc.y}
+        width={components.MuxReg2Loc.width}
+        height={components.MuxReg2Loc.height}
+        stroke={COLORS.BLACK}
+        highlightTop={highlightTop}
+        highlightBottom={highlightBottom}
+      />
+    </g>
+  );
 
-        {/* ALU Source MUX */}
-        <div className="absolute" style={{ left: '620px', top: '400px', width: '40px', height: '60px' }}>
-          <div className="w-full h-full bg-gray-100 border-2 border-gray-400 rounded flex items-center justify-center">
-            <svg width="30" height="50" viewBox="0 0 30 50">
-              <polygon points="5,10 25,10 30,25 25,40 5,40" fill="#f3f4f6" stroke="#6b7280" strokeWidth="2"/>
-              <text x="15" y="28" textAnchor="middle" fontSize="8">MUX</text>
-            </svg>
-          </div>
-        </div>
+  const drawMuxReadRegData = (highlightTop: boolean, highlightBottom: boolean) => (
+    <g>
+      <Multiplexor 
+        x={components.MuxReadReg.x}
+        y={components.MuxReadReg.y}
+        width={components.MuxReadReg.width}
+        height={components.MuxReadReg.height}
+        stroke={COLORS.BLACK}
+        highlightTop={highlightTop}
+        highlightBottom={highlightBottom}
+      />
+    </g>
+  );
 
-        {/* ALU */}
-        <div className="absolute" style={{ left: '680px', top: '360px', width: '100px', height: '80px' }}>
-          <ALU />
-        </div>
+  const drawMuxReadMemData = (highlightTop: boolean, highlightBottom: boolean) => (
+    <g>
+      <Multiplexor 
+        x={components.MuxReadMem.x}
+        y={components.MuxReadMem.y}
+        width={components.MuxReadMem.width}
+        height={components.MuxReadMem.height}
+        stroke={COLORS.BLACK}
+        highlightTop={highlightTop}
+        highlightBottom={highlightBottom}
+      />
+    </g>
+  );
 
-        {/* Shift Left 2 */}
-        <div className="absolute" style={{ left: '680px', top: '220px', width: '40px', height: '40px' }}>
-          <div className="w-full h-full bg-yellow-100 border-2 border-yellow-400 rounded flex items-center justify-center text-xs font-bold">
-            &lt;&lt;2
-          </div>
-        </div>
+  const drawControl = () => (
+    <g>
+      <Ellipse 
+        x={components.Control.x}
+        y={components.Control.y}
+        width={components.Control.width}
+        height={components.Control.height}
+        stroke={COLORS.CONTROL_BLUE}
+        fill={COLORS.WHITE}
+        strokeWidth={2}
+      />
+      {/* <text 
+        x={components.Control.x + components.Control.width/2}
+        y={components.Control.y + components.Control.height/2}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="10"
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        Control
+      </text> */}
+    </g>
+  );
 
-        {/* Branch Adder */}
-        <div className="absolute" style={{ left: '800px', top: '180px', width: '60px', height: '40px' }}>
-          <div className="w-full h-full bg-green-100 border-2 border-green-400 rounded flex items-center justify-center">
-            <svg width="40" height="25" viewBox="0 0 40 25">
-              <polygon points="5,12.5 15,5 35,5 35,20 15,20" fill="#dcfce7" stroke="#16a34a" strokeWidth="2"/>
-              <text x="20" y="15" textAnchor="middle" fontSize="8" fill="#16a34a">ADD</text>
-            </svg>
-          </div>
-        </div>
+  const drawALUControl = (highlight: boolean) => (
+    <g>
+      <Ellipse 
+        x={components.ALUControl.x}
+        y={components.ALUControl.y}
+        width={components.ALUControl.width}
+        height={components.ALUControl.height}
+        stroke={COLORS.CONTROL_BLUE}
+        fill={highlight ? COLORS.ARM_BLUE : COLORS.WHITE}
+        strokeWidth={2}
+      />
+      {/* <text 
+        x={components.ALUControl.x + components.ALUControl.width/2}
+        y={components.ALUControl.y + components.ALUControl.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        ALU
+      </text>
+      <text 
+        x={components.ALUControl.x + components.ALUControl.width/2}
+        y={components.ALUControl.y + components.ALUControl.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        control
+      </text> */}
+    </g>
+  );
 
-        {/* Data Memory */}
-        <div className="absolute" style={{ left: '900px', top: '360px', width: '180px', height: '80px' }}>
-          <DataMemory />
-        </div>
+  const drawSignExtend = (highlight: boolean) => (
+    <g>
+      <ComponentEllipse 
+        x={components.SignExtend.x}
+        y={components.SignExtend.y}
+        width={components.SignExtend.width}
+        height={components.SignExtend.height}
+        highlight={highlight}
+      />
+      {/* <text 
+        x={components.SignExtend.x + components.SignExtend.width/2}
+        y={components.SignExtend.y + components.SignExtend.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Sign
+      </text>
+      <text 
+        x={components.SignExtend.x + components.SignExtend.width/2}
+        y={components.SignExtend.y + components.SignExtend.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        extend
+      </text> */}
+    </g>
+  );
 
-        {/* Write Back MUX */}
-        <div className="absolute" style={{ left: '1220px', top: '360px', width: '40px', height: '60px' }}>
-          <div className="w-full h-full bg-gray-100 border-2 border-gray-400 rounded flex items-center justify-center">
-            <svg width="30" height="50" viewBox="0 0 30 50">
-              <polygon points="5,10 25,10 30,25 25,40 5,40" fill="#f3f4f6" stroke="#6b7280" strokeWidth="2"/>
-              <text x="15" y="28" textAnchor="middle" fontSize="8">MUX</text>
-            </svg>
-          </div>
-        </div>
+  const drawShiftLeft2 = (highlight: boolean) => (
+    <g>
+      <ComponentEllipse 
+        x={components.ShiftLeft2.x}
+        y={components.ShiftLeft2.y}
+        width={components.ShiftLeft2.width}
+        height={components.ShiftLeft2.height}
+        highlight={highlight}
+      />
+      <text 
+        x={components.ShiftLeft2.x + components.ShiftLeft2.width/2}
+        y={components.ShiftLeft2.y + components.ShiftLeft2.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={7}
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Shift
+      </text>
+      <text 
+        x={components.ShiftLeft2.x + components.ShiftLeft2.width/2}
+        y={components.ShiftLeft2.y + components.ShiftLeft2.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={7}
+        fontWeight="bold"
+        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
+      >
+        left 2
+      </text>
+    </g>
+  );
 
-        {/* PC Source MUX */}
-        <div className="absolute" style={{ left: '1340px', top: '240px', width: '40px', height: '60px' }}>
-          <div className="w-full h-full bg-gray-100 border-2 border-gray-400 rounded flex items-center justify-center">
-            <svg width="30" height="50" viewBox="0 0 30 50">
-              <polygon points="5,10 25,10 30,25 25,40 5,40" fill="#f3f4f6" stroke="#6b7280" strokeWidth="2"/>
-              <text x="15" y="28" textAnchor="middle" fontSize="8">MUX</text>
-            </svg>
-          </div>
-        </div>
+  const drawFlagAnd = () => (
+    <g>
+      <ANDGateHorizontal 
+        x={components.FlagAND.x}
+        y={components.FlagAND.y}
+        width={components.FlagAND.width}
+        height={components.FlagAND.height}
+        stroke={COLORS.CONTROL_BLUE}
+        fill={COLORS.WHITE}
+      />
+    </g>
+  );
 
-        {/* ALU Control */}
-        <div className="absolute" style={{ left: '700px', top: '480px', width: '60px', height: '40px' }}>
-          <div className="w-full h-full bg-cyan-100 border-2 border-cyan-400 rounded flex items-center justify-center text-xs font-bold">
-            ALU Ctrl
-          </div>
-        </div>
+  const drawZeroAnd = () => (
+    <g>
+      <ANDGateHorizontal 
+        x={components.ZeroAND.x}
+        y={components.ZeroAND.y}
+        width={components.ZeroAND.width}
+        height={components.ZeroAND.height}
+        stroke={COLORS.CONTROL_BLUE}
+        fill={COLORS.WHITE}
+      />
+    </g>
+  );
+
+  const drawBranchOr = () => (
+    <g>
+      <ORGateHorizontal 
+        x={components.BranchOR.x}
+        y={components.BranchOR.y}
+        width={components.BranchOR.width}
+        height={components.BranchOR.height}
+        stroke={COLORS.CONTROL_BLUE}
+        fill={COLORS.WHITE}
+      />
+    </g>
+  );
+
+  const drawFlags = (highlightWrite: boolean, highlightRead: boolean) => (
+    <g>
+      {/* Flags register split into 4 parts as in Java implementation */}
+      <Rectangle 
+        x={components.Flags.x}
+        y={components.Flags.y}
+        width={components.Flags.width/4}
+        height={components.Flags.height}
+        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={1}
+      />
+      <Rectangle 
+        x={components.Flags.x + components.Flags.width/4}
+        y={components.Flags.y}
+        width={components.Flags.width/4}
+        height={components.Flags.height}
+        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={1}
+      />
+      <Rectangle 
+        x={components.Flags.x + 2*components.Flags.width/4}
+        y={components.Flags.y}
+        width={components.Flags.width/4}
+        height={components.Flags.height}
+        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={1}
+      />
+      <Rectangle 
+        x={components.Flags.x + 3*components.Flags.width/4}
+        y={components.Flags.y}
+        width={components.Flags.width/4}
+        height={components.Flags.height}
+        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
+        stroke={COLORS.BLACK}
+        strokeWidth={1}
+      />
+      {/* <text 
+        x={components.Flags.x + components.Flags.width/2}
+        y={components.Flags.y + components.Flags.height/2}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize="8"
+        fontWeight="bold"
+        fill={(highlightWrite || highlightRead) ? COLORS.WHITE : COLORS.BLACK}
+      >
+        Flags
+      </text> */}
+    </g>
+  );
+
+  // Main component drawing function that matches Java drawComponentsInit()
+  const ComponentElements = () => (
+    <g>
+      {drawPC(false)}
+      {drawInsMem(false, false)}
+      {drawRegFile(false, false)}
+      {drawDataMem(false, false)}
+      {drawALUPC(false)}
+      {drawALUBranch(false)}
+      {drawALUMain(false)}
+      {drawMuxPC(false, false)}
+      {drawMuxReg2Loc(false, false)}
+      {drawMuxReadRegData(false, false)}
+      {drawMuxReadMemData(false, false)}
+      {drawSignExtend(false)}
+      {drawShiftLeft2(false)}
+      {drawFlags(false, false)}
+      {drawFlagAnd()}
+      {drawZeroAnd()}
+      {drawBranchOr()}
+      {drawControl()}
+      {drawALUControl(false)}
+    </g>
+  );
+
+  // Text drawing functions converted from Java SingleCycleVis.java
+  const drawMux_TXT = (muxCoords: {x: number, y: number, width: number, height: number}, top: string, bottom: string) => (
+    <g>
+      <text 
+        x={muxCoords.x + muxCoords.width/2}
+        y={muxCoords.y + muxCoords.height/2 - 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        M
+      </text>
+      <text 
+        x={muxCoords.x + muxCoords.width/2}
+        y={muxCoords.y + muxCoords.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        u
+      </text>
+      <text 
+        x={muxCoords.x + muxCoords.width/2}
+        y={muxCoords.y + muxCoords.height/2 + 15}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        x
+      </text>
+      <text 
+        x={muxCoords.x + muxCoords.width/2}
+        y={muxCoords.y + 14}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={13 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        {top}
+      </text>
+      <text 
+        x={muxCoords.x + muxCoords.width/2}
+        y={muxCoords.y + muxCoords.height - 4}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={13 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        {bottom}
+      </text>
+    </g>
+  );
+
+  // Text labels for components (converted from Java drawStringsInit)
+  const TextLabels = ({ signExtend = true, zero = false, stxr = false }) => (
+    <g>
+      {/* Component Labels - Bold 14px */}
+      
+      {/* PC Text - already handled in drawPC */}
+      
+      {/* ALU PC Text */}
+      <text 
+        x={components.ALUPC.x + 3*components.ALUPC.width/5}
+        y={components.ALUPC.y + components.ALUPC.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        Add
+      </text>
+
+      {/* Instruction Memory Text - already handled in drawInsMem */}
+      
+      {/* Multiplexor labels */}
+      {drawMux_TXT(components.MuxReg2Loc, "0", "1")}
+      
+      {/* Register File Text - already handled in drawRegFile */}
+      
+      {/* Sign Extend / Pad Text */}
+      {signExtend ? (
+        <g>
+          <text 
+            x={components.SignExtend.x + components.SignExtend.width/2}
+            y={components.SignExtend.y + components.SignExtend.height/3 + 10}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={14 * scale}
+            fontWeight="bold"
+            fill={COLORS.BLACK}
+          >
+            Sign-
+          </text>
+          <text 
+            x={components.SignExtend.x + components.SignExtend.width/2}
+            y={components.SignExtend.y + components.SignExtend.height/3 + 25}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={14 * scale}
+            fontWeight="bold"
+            fill={COLORS.BLACK}
+          >
+            extend
+          </text>
+        </g>
+      ) : (
+        <text 
+          x={components.SignExtend.x + components.SignExtend.width/2}
+          y={components.SignExtend.y + components.SignExtend.height/2 + 5}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={14 * scale}
+          fontWeight="bold"
+          fill={COLORS.BLACK}
+        >
+          Pad
+        </text>
+      )}
+      
+      {/* Shift Left 2 Text - already handled in drawShiftLeft2 */}
+      
+      {/* More MUX labels */}
+      {drawMux_TXT(components.MuxReadReg, "0", "1")}
+      
+      {/* ALU Main Text - already handled in drawALUMain */}
+      
+      {/* Flag Text */}
+      <text 
+        x={components.Flags.x + components.Flags.width/8}
+        y={components.Flags.y + components.Flags.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        N
+      </text>
+      <text 
+        x={components.Flags.x + 3*components.Flags.width/8}
+        y={components.Flags.y + components.Flags.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        Z
+      </text>
+      <text 
+        x={components.Flags.x + 5*components.Flags.width/8}
+        y={components.Flags.y + components.Flags.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        C
+      </text>
+      <text 
+        x={components.Flags.x + 7*components.Flags.width/8}
+        y={components.Flags.y + components.Flags.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        V
+      </text>
+      
+      {/* ALU Branch Text */}
+      <text 
+        x={components.ALUBranch.x + 2*components.ALUBranch.width/5 + 2.5}
+        y={components.ALUBranch.y + components.ALUBranch.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.BLACK}
+      >
+        Add
+      </text>
+      
+      {/* Data Memory Text - already handled in drawDataMem */}
+      
+      {/* More MUX labels */}
+      {drawMux_TXT(components.MuxReadMem, "1", "0")}
+      {drawMux_TXT(components.MuxPC, "0", "1")}
+      
+      {/* Medium size text - 13px */}
+      
+      {/* PC+4 Text */}
+      <text 
+        x={verticalLines.PC_PCALU_X + (components.ALUPC.x - verticalLines.PC_PCALU_X)/2}
+        y={components.ALUPC.y + 13*components.ALUPC.height/16 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={13 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        4
+      </text>
+      
+      {/* Sign Extend bit labels */}
+      <text 
+        x={components.RegFile.x + (components.SignExtend.x - components.RegFile.x)/2 - 3*4/4} // Approximating text width
+        y={components.SignExtend.y + 2*components.SignExtend.height/5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={13 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        32
+      </text>
+      
+      <text 
+        x={components.SignExtend.x + components.SignExtend.width + (components.SignExtend.x - components.RegFile.x)/2 - 3*4/4}
+        y={components.SignExtend.y + 2*components.SignExtend.height/5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={13 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        64
+      </text>
+      
+      {/* Small text - 12px */}
+      
+      {/* Instruction Fields */}
+      <text 
+        x={components.InsMem.x + components.InsMem.width - 4}
+        y={components.InsMem.y + components.InsMem.height/2}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction
+      </text>
+      <text 
+        x={components.InsMem.x + components.InsMem.width - 4}
+        y={components.InsMem.y + components.InsMem.height/2 + 10}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        [31-0]
+      </text>
+      
+      <text 
+        x={verticalLines.INS_MEM_X + 5}
+        y={components.Control.y + components.Control.height/2 - 5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [31-21]
+      </text>
+      
+      <text 
+        x={verticalLines.INS_MEM_X + 5}
+        y={components.RegFile.y + components.RegFile.height/10 - 5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [9-5]
+      </text>
+      
+      <text 
+        x={verticalLines.INS_MEM_X + 5}
+        y={components.MuxReg2Loc.y + components.MuxReg2Loc.width/2 - 5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [20-16]
+      </text>
+      
+      <text 
+        x={verticalLines.INS_MEM_X + 5}
+        y={components.RegFile.y + 7*components.RegFile.height/10 + 15}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [4-0]
+      </text>
+      
+      <text 
+        x={verticalLines.INS_MEM_X + 5}
+        y={components.SignExtend.y + components.SignExtend.height/2 - 5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [31-0]
+      </text>
+      
+      <text 
+        x={components.RegFile.x + 5}
+        y={components.ALUControl.y + 1.25*components.ALUControl.height - 5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Instruction [31-21]
+      </text>
+      
+      {/* Memory and Register labels */}
+      <text 
+        x={components.InsMem.x + 3}
+        y={components.InsMem.y + components.RegFile.height/10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Read
+      </text>
+      <text 
+        x={components.InsMem.x + 3}
+        y={components.InsMem.y + components.RegFile.height/10 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        address
+      </text>
+      
+      {/* Register File labels */}
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + components.RegFile.height/10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Read
+      </text>
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + components.RegFile.height/10 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        register 1
+      </text>
+      
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 4*components.RegFile.height/10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Read
+      </text>
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 4*components.RegFile.height/10 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        register 2
+      </text>
+      
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 7*components.RegFile.height/10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Write
+      </text>
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 7*components.RegFile.height/10 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        register
+      </text>
+      
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 9*components.RegFile.height/10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Write
+      </text>
+      <text 
+        x={components.RegFile.x + 3}
+        y={components.RegFile.y + 9*components.RegFile.height/10 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        data
+      </text>
+      
+      {/* Read Data labels */}
+      <text 
+        x={components.RegFile.x + components.RegFile.width - 4}
+        y={components.ALUMain.y + 3*components.ALUMain.height/16}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Read
+      </text>
+      <text 
+        x={components.RegFile.x + components.RegFile.width - 4}
+        y={components.ALUMain.y + 3*components.ALUMain.height/16 + 10}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        data 1
+      </text>
+      
+      <text 
+        x={components.RegFile.x + components.RegFile.width - 4}
+        y={components.MuxReadReg.y + components.MuxReadReg.width/2}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Read
+      </text>
+      <text 
+        x={components.RegFile.x + components.RegFile.width - 4}
+        y={components.MuxReadReg.y + components.MuxReadReg.width/2 + 10}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        data 2
+      </text>
+      
+      {/* Data Memory labels */}
+      <text 
+        x={components.DataMem.x + 3}
+        y={components.ALUMain.y + 5*components.ALUMain.height/8 + 4}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Address
+      </text>
+      
+      <text 
+        x={components.DataMem.x + 3}
+        y={components.DataMem.y + 5*components.DataMem.height/6}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Write
+      </text>
+      <text 
+        x={components.DataMem.x + 3}
+        y={components.DataMem.y + 5*components.DataMem.height/6 + 12}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        Data
+      </text>
+      
+      {/* Data Memory Read/Store outcome */}
+      {!stxr ? (
+        <g>
+          <text 
+            x={components.DataMem.x + components.DataMem.width - 4}
+            y={components.MuxReadMem.y + components.MuxReadMem.width/2}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={12 * scale}
+            fontWeight="normal"
+            fill={COLORS.BLACK}
+          >
+            Read
+          </text>
+          <text 
+            x={components.DataMem.x + components.DataMem.width - 4}
+            y={components.MuxReadMem.y + components.MuxReadMem.width/2 + 10}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={12 * scale}
+            fontWeight="normal"
+            fill={COLORS.BLACK}
+          >
+            data
+          </text>
+        </g>
+      ) : (
+        <g>
+          <text 
+            x={components.DataMem.x + components.DataMem.width - 4}
+            y={components.MuxReadMem.y + components.MuxReadMem.width/2}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={12 * scale}
+            fontWeight="normal"
+            fill={COLORS.BLACK}
+          >
+            Store
+          </text>
+          <text 
+            x={components.DataMem.x + components.DataMem.width - 4}
+            y={components.MuxReadMem.y + components.MuxReadMem.width/2 + 10}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fontSize={12 * scale}
+            fontWeight="normal"
+            fill={COLORS.BLACK}
+          >
+            outcome
+          </text>
+        </g>
+      )}
+      
+      {/* ALU Zero output */}
+      <text 
+        x={components.ALUMain.x + components.ALUMain.width - 4}
+        y={components.ALUMain.y + 3*components.ALUMain.height/8 + 2.5}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.BLACK}
+      >
+        {zero ? "Zero" : "!Zero"}
+      </text>
+      
+      {/* Control Unit labels - Blue text */}
+      <text 
+        x={components.Control.x + components.Control.width/2}
+        y={components.Control.y + components.Control.height/2 + 5}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        Control
+      </text>
+      
+      <text 
+        x={components.ALUControl.x + components.ALUControl.width/2}
+        y={components.ALUControl.y + components.ALUControl.height/3 + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        ALU
+      </text>
+      <text 
+        x={components.ALUControl.x + components.ALUControl.width/2}
+        y={components.ALUControl.y + 2*components.ALUControl.height/3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={14 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        control
+      </text>
+      
+      {/* Control Signal Labels - Blue text, 12px */}
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        Reg2Loc
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        UncondBranch
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 2*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        FlagBranch
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 3*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        ZeroBranch
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 4*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        MemRead
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 5*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        MemToReg
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 6*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        MemWrite
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 7*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        FlagWrite
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 8*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        ALUSrc
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 9*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        ALUOp
+      </text>
+      
+      <text 
+        x={components.Control.x + components.Control.width + 5}
+        y={components.Control.y + CONTROL_OFFSET - 2.5 + 10*CONTROL_PADDING}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={12 * scale}
+        fontWeight="normal"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        RegWrite
+      </text>
+    </g>
+  );
+  // Control signal value display function
+  const ControlSignalValues = ({ 
+    controlConfig,
+    flags_flagAnd = "0",
+    flagAnd_branchOr = "0",
+    ALUMain_ZeroAnd = "0",
+    zeroAnd_branchOr = "0",
+    branchOr_PCMux = "0",
+    ALUMain = "ADD"
+  }: {
+    controlConfig: typeof cpu.controlSignals;
+    flags_flagAnd?: string;
+    flagAnd_branchOr?: string;
+    ALUMain_ZeroAnd?: string;
+    zeroAnd_branchOr?: string;
+    branchOr_PCMux?: string;
+    ALUMain?: string;
+  }) => (
+    <g>
+      {/* Control signal values in blue - 11px bold */}
+      <text 
+        x={components.MuxReg2Loc.x + components.MuxReg2Loc.width/2 - 1}
+        y={components.RegFile.y + 9*components.RegFile.height/10 - 2}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.reg2Loc?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.BranchOR.x - 7.5}
+        y={components.BranchOR.y + 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.uncondBranch?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.FlagAND.x - 2}
+        y={components.FlagAND.y + 2.5}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.flagBranch?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.ZeroAND.x - 2}
+        y={components.ZeroAND.y + 2.5}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.zeroBranch?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.DataMem.x + components.DataMem.width/2 - 1}
+        y={components.DataMem.y - 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.memRead?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.MuxReadMem.x + components.MuxReadMem.width/2 - 1}
+        y={components.MuxReadMem.y - 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.memToReg?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.DataMem.x + components.DataMem.width/2 - 1}
+        y={components.DataMem.y + components.DataMem.height + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.memWrite?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.Flags.x + components.Flags.width/2 - 1}
+        y={components.Flags.y - 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.flagWrite?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.MuxReadReg.x + components.MuxReadReg.width/2 - 1}
+        y={components.MuxReadReg.y - 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.aluSrc?.toString() || "0"}
+      </text>
+      
+      <text 
+        x={components.RegFile.x + components.RegFile.width/2 + 2}
+        y={components.RegFile.y - 3}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.regWrite?.toString() || "0"}
+      </text>
+      
+      {/* Gate signal values */}
+      <text 
+        x={components.FlagAND.x - 2}
+        y={components.FlagAND.y + components.FlagAND.height/2 + 5}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {flags_flagAnd}
+      </text>
+      
+      <text 
+        x={components.FlagAND.x + components.FlagAND.width + 7}
+        y={components.FlagAND.y + components.FlagAND.height/2 - 1}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {flagAnd_branchOr}
+      </text>
+      
+      <text 
+        x={components.ZeroAND.x - 2}
+        y={components.ZeroAND.y + components.ZeroAND.height/2 + 5}
+        textAnchor="end"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {ALUMain_ZeroAnd}
+      </text>
+      
+      <text 
+        x={components.ZeroAND.x + components.ZeroAND.width + 5}
+        y={components.ZeroAND.y + components.ZeroAND.height/2 - 1}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {zeroAnd_branchOr}
+      </text>
+      
+      <text 
+        x={components.MuxPC.x + components.MuxPC.width/2 - 1}
+        y={components.MuxPC.y + components.MuxPC.height + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {branchOr_PCMux}
+      </text>
+      
+      <text 
+        x={components.ALUControl.x + components.ALUControl.width/2 - 3}
+        y={components.ALUControl.y + components.ALUControl.height + 10}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {controlConfig?.aluOp?.toString() || "00"}
+      </text>
+      
+      <text 
+        x={components.ALUMain.x + components.ALUMain.width/2 + 3}
+        y={components.ALUMain.y + 7*components.ALUMain.height/8 + 10}
+        textAnchor="start"
+        dominantBaseline="middle"
+        fontSize={11 * scale}
+        fontWeight="bold"
+        fill={COLORS.CONTROL_BLUE}
+      >
+        {ALUMain}
+      </text>
+    </g>
+  );
+
+  return (
+    <div className="relative w-full h-full bg-white overflow-hidden">
+      {/* Title */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20">
+        <h3 className="text-lg font-bold text-gray-800">LEGv8 Single-Cycle Processor Datapath</h3>
+        <p className="text-sm text-gray-600 text-center">Based on Patterson & Hennessy ARM Edition</p>
       </div>
 
-      {/* Current instruction indicator */}
+      {/* Animation mode indicator */}
+      <div className="absolute top-4 left-4 flex items-center space-x-2 z-20">
+        <div className={`w-3 h-3 rounded-full ${mode === 'simulation' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+        <span className="text-sm font-medium capitalize">{mode} Mode</span>
+      </div>      {/* SVG Datapath */}
+      <svg
+        ref={svgRef}
+        className="absolute w-full"
+        style={{ top: '60px', left: '0', right: '0', bottom: '0', height: 'calc(100% - 60px)' }}
+        viewBox={`0 0 ${scaledWidth} ${TARGET_HEIGHT}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          {/* Arrow markers */}
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#374151" />
+          </marker>
+          <marker id="arrowhead-active" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#3B82F6" />
+          </marker>
+          <marker id="arrowhead-control" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill={COLORS.CONTROL_BLUE} />
+          </marker>
+        </defs>        {/* Background */}
+        <rect width="100%" height="100%" fill="white" />
+
+        {/* Draw wires first (behind components) */}
+        <WireComponents />
+
+        {/* Draw control signals */}
+        <ControlSignalComponents />        {/* Draw components on top */}
+        <ComponentElements />
+
+        {/* Draw text labels */}
+        <TextLabels />
+
+        {/* Draw control signal values */}
+        <ControlSignalValues 
+          controlConfig={cpu.controlSignals}
+          flags_flagAnd="0"
+          flagAnd_branchOr="0"
+          ALUMain_ZeroAnd="0"
+          zeroAnd_branchOr="0"
+          branchOr_PCMux="0"
+          ALUMain={cpu.controlSignals.aluOp || "ADD"}
+        />
+
+       
+      </svg>
+
+      {/* Current instruction display */}
       {cpu.currentInstruction && (
-        <div className="absolute top-4 right-4 bg-cpu-blue text-white px-3 py-2 rounded-lg text-sm font-mono">
-          <div className="font-bold">Current Instruction:</div>
-          <div>{cpu.currentInstruction.assembly}</div>
-          <div className="text-xs opacity-75">
-            PC: 0x{cpu.pc.toString(16).toUpperCase().padStart(8, '0')}
+        <div className="absolute top-16 right-4 bg-blue-900 text-white p-3 rounded-lg shadow-lg z-20 min-w-[200px]">
+          <div className="text-xs text-blue-200">Current Instruction</div>
+          <div className="font-semibold">{cpu.currentInstruction?.assembly}</div>
+          <div className="mt-2 text-xs">
+            <div className="text-blue-200">Active Control Signals:</div>
+            <div className="grid grid-cols-2 gap-1 mt-1">
+              {cpu.controlSignals?.regWrite && <div className="text-green-300">RegWrite</div>}
+              {cpu.controlSignals?.memRead && <div className="text-green-300">MemRead</div>}
+              {cpu.controlSignals?.memWrite && <div className="text-green-300">MemWrite</div>}
+              {cpu.controlSignals?.aluSrc && <div className="text-green-300">ALUSrc</div>}
+              {cpu.controlSignals?.memToReg && <div className="text-green-300">MemToReg</div>}
+              {cpu.controlSignals?.uncondBranch && <div className="text-green-300">Branch</div>}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Animation mode indicator */}
-      <div className="absolute top-4 left-4 flex items-center space-x-2">
-        <div className={`w-3 h-3 rounded-full ${mode === 'simulation' ? 'bg-cpu-green animate-pulse' : 'bg-cpu-gray'}`} />
-        <span className="text-sm font-medium capitalize">{mode} Mode</span>
+      {/* Instruction breakdown display (like in reference) */}
+      {cpu.currentInstruction && (
+        <div className="absolute bottom-16 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg z-20 min-w-[400px]">
+          <div className="text-sm font-semibold text-gray-800 mb-2">Instruction Breakdown</div>
+          <div className="font-mono text-sm">
+            <div className="flex items-center space-x-4 mb-2">
+              <span className="font-bold text-blue-600">{cpu.currentInstruction.assembly}</span>
+            </div>
+            <div className="grid grid-cols-5 gap-2 text-xs border-t pt-2">
+              <div className="text-center">
+                <div className="text-blue-600 font-bold">opcode</div>
+                <div className="bg-blue-100 p-1 rounded">[31-21]</div>
+                <div className="text-xs text-gray-600 mt-1">11 bits</div>
+              </div>
+              <div className="text-center">
+                <div className="text-green-600 font-bold">Rm</div>
+                <div className="bg-green-100 p-1 rounded">[20-16]</div>
+                <div className="text-xs text-gray-600 mt-1">5 bits</div>
+              </div>
+              <div className="text-center">
+                <div className="text-purple-600 font-bold">shamt</div>
+                <div className="bg-purple-100 p-1 rounded">[15-10]</div>
+                <div className="text-xs text-gray-600 mt-1">6 bits</div>
+              </div>
+              <div className="text-center">
+                <div className="text-orange-600 font-bold">Rn</div>
+                <div className="bg-orange-100 p-1 rounded">[9-5]</div>
+                <div className="text-xs text-gray-600 mt-1">5 bits</div>
+              </div>
+              <div className="text-center">
+                <div className="text-red-600 font-bold">Rd</div>
+                <div className="bg-red-100 p-1 rounded">[4-0]</div>
+                <div className="text-xs text-gray-600 mt-1">5 bits</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Panel */}
+      <div className="absolute bottom-4 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg min-w-[200px] z-20">
+        <div className="text-sm font-semibold text-gray-800 mb-2">CPU Status</div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="space-y-1">
+            <div className="font-medium text-gray-700">PC:</div>
+            <div className="text-blue-600">0x{cpu.pc.toString(16).padStart(8, '0')}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="font-medium text-gray-700">Flags:</div>
+            <div className={`${cpu.flags?.zero ? 'text-red-600' : 'text-gray-400'}`}>
+              Z: {cpu.flags?.zero ? '1' : '0'}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
+
   );
 };
 
-export default CPUDatapath; 
+export default CPUDatapath;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSimulatorStore } from '../../store/simulatorStore';
+import { useSimulatorStore } from '../../../store/simulatorStore';
 
 const DataPaths: React.FC = () => {
   const { cpu } = useSimulatorStore();
