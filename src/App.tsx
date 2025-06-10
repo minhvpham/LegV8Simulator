@@ -9,9 +9,8 @@ import './index.css';
 const App: React.FC = () => {
   const [showEditor, setShowEditor] = useState(true);
   const { mode } = useSimulatorStore();
-
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-full mx-auto px-4 py-3">
@@ -38,7 +37,7 @@ const App: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <div className="max-w-full mx-auto p-4 space-y-4">
+      <div className="flex-1 max-w-full mx-auto p-4 space-y-4 pb-20">
         
         {/* Control Panel and Code Editor Row */}
         <div className={`grid gap-4 ${showEditor ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
@@ -53,9 +52,7 @@ const App: React.FC = () => {
               <CodeEditor />
             </div>
           )}
-        </div>
-
-        {/* Register and Memory Viewer */}
+        </div>        {/* Register and Memory Viewer */}
         <RegisterMemoryViewer />
 
         {/* CPU Datapath */}
@@ -67,20 +64,22 @@ const App: React.FC = () => {
             <p className="text-sm text-gray-600 mt-1">
               Interactive visualization of the CPU architecture with real-time data flow
             </p>
-          </div>
-          <div className="relative" style={{ height: '700px' }}>
+          </div>          <div className="relative" style={{ height: '700px', overflow: 'hidden' }}>
             <CPUDatapath />
           </div>
         </div>
 
-        {/* Footer */}
-        <footer className="text-center text-sm text-gray-500 py-4">
-          <p>LEGv8 CPU Simulator - Built with React, TypeScript, and GSAP</p>
-          <p className="mt-1">
-            Features: Real-time execution, step-by-step debugging, animated data flow visualization
-          </p>
-        </footer>
+        {/* Spacer to ensure proper separation */}
+        <div className="h-8"></div>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-white border-t text-center text-sm text-gray-500 py-4 mt-8">
+        <p>LEGv8 CPU Simulator - Built with React, TypeScript, and GSAP</p>
+        <p className="mt-1">
+          Features: Real-time execution, step-by-step debugging, animated data flow visualization
+        </p>
+      </footer>
     </div>
   );
 };
