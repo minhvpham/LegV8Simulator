@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
-import { SimulatorState, CPUState, Instruction, SimulationMode } from '../types';
+import { SimulatorState, CPUState, Instruction, SimulationMode, Point, ComponentHighlight, DataCircle } from '../types';
 
 // Enable MapSet plugin for Immer to handle Maps and Sets
 enableMapSet();
@@ -19,6 +19,19 @@ interface SimulatorStore extends SimulatorState {
   pause: () => void;
   reset: () => void;
   jumpToStep: (step: number) => void;
+  
+  // Animation control
+  startAnimation: (instruction: string) => void;
+  stopAnimation: () => void;
+  setAnimationStage: (stage: number, total: number) => void;
+  setAnimationPath: (path: Point[]) => void;
+  setHighlightedComponents: (components: ComponentHighlight[]) => void;
+  
+  // Multi-circle animation actions
+  createCircle: (circle: DataCircle) => void;
+  splitCircle: (parentId: string, children: DataCircle[]) => void;
+  transformCircle: (circleId: string, newData: any, newType?: string) => void;
+  clearCircles: () => void;
   
   // CPU state updates
   updateRegister: (index: number, value: number) => void;
@@ -1063,7 +1076,17 @@ export const useSimulatorStore = create<SimulatorStore>()(
     cpu: initialCPUState,
     sourceCode: '',
     currentStep: 0,
-    totalSteps: 0,
+    totalSteps: 0,    // Animation state
+    isAnimating: false,
+    currentAnimationStage: 0,
+    totalAnimationStages: 0,
+    animationQueue: [],
+    animationPath: [],
+    highlightedComponents: [],
+    
+    // Multi-circle animation state
+    activeCircles: new Map(),
+    circleHistory: [],
 
     // Actions
     setMode: (mode) =>
@@ -1239,11 +1262,80 @@ export const useSimulatorStore = create<SimulatorStore>()(
     updatePC: (value) =>
       set((state) => {
         state.cpu.pc = value;
-      }),
-
-    updateMemory: (address, value) =>
+      }),    updateMemory: (address, value) =>
       set((state) => {
         state.cpu.dataMemory.set(address, value);
       }),
+
+    // Animation control actions
+    startAnimation: (instruction) =>
+      set((state) => {
+        state.isAnimating = true;
+        state.currentAnimationStage = 0;
+        state.animationQueue.push(instruction);
+      }),
+
+    stopAnimation: () =>
+      set((state) => {
+        state.isAnimating = false;
+        state.currentAnimationStage = 0;
+        state.totalAnimationStages = 0;
+        state.animationQueue = [];
+      }),    setAnimationStage: (stage, total) =>
+      set((state) => {
+        state.currentAnimationStage = stage;
+        state.totalAnimationStages = total;
+      }),    setAnimationPath: (path) =>
+      set((state) => {
+        state.animationPath = path;
+      }),
+
+    setHighlightedComponents: (components) =>
+      set((state) => {
+        state.highlightedComponents = components;
+      }),
+
+    // Multi-circle animation actions
+    createCircle: (circle) =>
+      set((state) => {
+        state.activeCircles.set(circle.id, circle);
+      }),
+
+    splitCircle: (parentId, children) =>
+      set((state) => {
+        // Mark parent as inactive
+        const parent = state.activeCircles.get(parentId);
+        if (parent) {
+          parent.isActive = false;
+          parent.childIds = children.map(c => c.id);
+        }
+        
+        // Add children with parent reference
+        children.forEach(child => {
+          child.parentId = parentId;
+          state.activeCircles.set(child.id, child);
+        });
+      }),
+
+    transformCircle: (circleId, newData, newType) =>
+      set((state) => {
+        const circle = state.activeCircles.get(circleId);
+        if (circle) {
+          circle.dataValue = newData;
+          if (newType) {
+            circle.dataType = newType as any;
+          }
+        }
+      }),
+
+    clearCircles: () =>
+      set((state) => {
+        // Save current circles to history before clearing
+        const currentCircles = Array.from(state.activeCircles.values());
+        state.circleHistory.push(currentCircles);
+        
+        // Clear active circles
+        state.activeCircles.clear();
+      }),
   }))
-); 
+);
