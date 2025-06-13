@@ -1,5 +1,9 @@
 // LEGv8 Simulator Types
 
+// Animation types
+export * from './animationTypes';
+import type { DataCircle } from './animationTypes';
+
 export type SimulationMode = 'simulation' | 'realtime';
 
 export interface CPUState {
@@ -65,6 +69,19 @@ export interface InstructionFields {
   label?: string;
 }
 
+// Point interface for animation paths
+export interface Point {
+  x: number;
+  y: number;
+}
+
+// Component highlight interface for animation
+export interface ComponentHighlight {
+  componentId: string;
+  highlightType: 'active' | 'processing' | 'complete';
+  duration: number;
+}
+
 export interface SimulatorState {
   mode: SimulationMode;
   isRunning: boolean;
@@ -74,6 +91,18 @@ export interface SimulatorState {
   sourceCode: string;
   currentStep: number;
   totalSteps: number;
+  
+  // Animation state
+  isAnimating: boolean;
+  currentAnimationStage: number;
+  totalAnimationStages: number;
+  animationQueue: string[];
+  animationPath: Point[];
+  highlightedComponents: ComponentHighlight[];
+  
+  // Multi-circle animation state
+  activeCircles: Map<string, DataCircle>;
+  circleHistory: DataCircle[][];
 }
 
 export interface AnimationConfig {

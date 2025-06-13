@@ -1,6 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSimulatorStore } from '../../store/simulatorStore';
 import { animationController } from '../../utils/animations';
+import { componentRegistry, addComponentAttribute } from '../../utils/componentRegistry';
+import { instructionAnimationController } from '../../utils/instructionAnimationController';
+import { getStageSequenceForInstruction, adjustStageDurations } from '../../utils/stageAnimations';
+import { DataCircle } from '../../types/animationTypes';
+import AnimationCircle from './AnimationCircle';
+import ComponentHighlighter from './ComponentHighlighter';
+import CircleManager from './CircleManager';
+import { WirePathVisualizer, WirePathDebugPanel } from './WirePathVisualizer';
 import Rectangle from './BaseShape/Rectangle';
 import ALUShape from './BaseShape/ALUComponent';
 import Multiplexor from './BaseShape/Multiplexor';
@@ -14,7 +22,31 @@ import DiagonalSlash from './BaseShape/DiagonalSlash';
 
 const CPUDatapath: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { mode, cpu, animationSpeed } = useSimulatorStore();
+  const { 
+    mode, 
+    cpu, 
+    animationSpeed, 
+    step, 
+    startAnimation, 
+    stopAnimation, 
+    setAnimationStage, 
+    animationPath, 
+    highlightedComponents, 
+    setAnimationPath, 
+    setHighlightedComponents 
+  } = useSimulatorStore();  // Animation state
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [activeComponents, setActiveComponents] = useState<Set<string>>(new Set());
+  const [currentAnimationStages, setCurrentAnimationStages] = useState<any[]>([]);
+  const [currentStageDuration, setCurrentStageDuration] = useState(1000);
+  const [showStageAnimation, setShowStageAnimation] = useState(false);
+    // Multi-circle animation state
+  const [activeCircles, setActiveCircles] = useState<Map<string, DataCircle>>(new Map());
+  const [lastInstruction, setLastInstruction] = useState<string | null>(null);
+  
+  // Debug state for wire path visualization
+  const [showWireDebug, setShowWireDebug] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState('PC->InsMem');
 
   useEffect(() => {
     animationController.setSpeed(animationSpeed);
@@ -150,7 +182,177 @@ const CPUDatapath: React.FC = () => {
       x: 835 * scale,
       y: 420 * scale,
       width: 25 * scale,
-      height: 65 * scale
+      height: 65 * scale    }
+  };  // Initialize component registry for animation system
+  useEffect(() => {
+    componentRegistry.initialize(components, verticalLines, scale);
+    // Set wire path calculator for the animation controller
+    instructionAnimationController.setWirePathCalculator(componentRegistry);
+  }, [scale]);  // Setup animation callbacks
+  useEffect(() => {
+    instructionAnimationController.setCallbacks({      onStageStart: (stage: any, stageIndex: number, wirePath?: any[]) => {
+        console.log(`Starting stage ${stageIndex}: ${stage.name}`);
+        setAnimationStage(stageIndex, currentAnimationStages.length);
+        
+        // Set current stage duration
+        setCurrentStageDuration(stage.duration || 1000);
+        
+        // Set animation path for this stage
+        if (wirePath && wirePath.length > 0) {
+          console.log('Setting animation path:', wirePath);
+          setAnimationPath(wirePath);
+        } else {
+          console.log('No wire path provided for stage:', stage.name);
+          setAnimationPath([]);
+        }
+        
+        // Set component highlights for this stage based on activatedComponents
+        if (stage.activatedComponents && stage.activatedComponents.length > 0) {
+          const highlights = stage.activatedComponents.map((componentId: string) => ({
+            componentId,
+            highlightType: 'processing' as const,
+            duration: 1000
+          }));
+          setHighlightedComponents(highlights);
+        }
+      },      onStageComplete: (stage: any, stageIndex: number) => {
+        console.log(`Completed stage ${stageIndex}: ${stage.name}`);
+        // Clear highlights after stage completes
+        setHighlightedComponents([]);
+      },      onAnimationComplete: () => {
+        console.log('Animation complete');
+        setIsAnimating(false);
+        setShowStageAnimation(false);
+        stopAnimation();
+        // Clear animation state
+        setAnimationPath([]);
+        setHighlightedComponents([]);
+        // Execute the actual instruction step after animation
+        step();
+      },
+      onComponentHighlight: (componentIds: string[]) => {
+        setActiveComponents(new Set(componentIds));
+        // Also update store highlights
+        const highlights = componentIds.map(componentId => ({
+          componentId,
+          highlightType: 'active' as const,
+          duration: 1000
+        }));
+        setHighlightedComponents(highlights);
+      },
+      // Multi-circle animation callbacks
+      onCircleCreate: (circle: DataCircle) => {
+        console.log('Creating circle:', circle.id, 'with data:', circle.dataValue);
+        setActiveCircles(prev => new Map(prev.set(circle.id, circle)));
+      },
+      onCircleUpdate: (circle: DataCircle) => {
+        console.log('Updating circle:', circle.id, 'with data:', circle.dataValue);
+        setActiveCircles(prev => new Map(prev.set(circle.id, circle)));
+      },
+      onCircleDestroy: (circleId: string) => {
+        console.log('Destroying circle:', circleId);
+        setActiveCircles(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(circleId);
+          return newMap;
+        });
+      }
+    });
+  }, [currentAnimationStages.length, setAnimationStage, stopAnimation, step, setAnimationPath, setHighlightedComponents]);
+  // Handle Next Step button click
+  const handleNextStep = async () => {
+    if (isAnimating) {
+      console.log('Animation already in progress, skipping...');
+      return;
+    }
+
+    // Check if we have a current instruction to animate
+    if (cpu.currentInstruction) {
+      const currentInstructionText = cpu.currentInstruction.assembly;
+      console.log('Starting animation for instruction:', currentInstructionText);
+        // Circle persistence logic: Let the animation controller handle circle clearing
+      if (lastInstruction !== null && lastInstruction !== currentInstructionText) {
+        console.log('New instruction detected:', currentInstructionText);
+        // The animation controller will handle circle clearing internally
+      }
+      setLastInstruction(currentInstructionText);
+      
+      setIsAnimating(true);
+      
+      // Safety timeout to prevent stuck animations
+      const animationTimeout = setTimeout(() => {
+        console.warn('Animation timeout - forcing completion');
+        setIsAnimating(false);
+        setShowStageAnimation(false);
+        stopAnimation();
+        setAnimationPath([]);
+        setHighlightedComponents([]);
+      }, 30000); // 30 second timeout
+        try {
+        // Get the instruction type from the assembly string
+        const instructionType = currentInstructionText.split(' ')[0];
+        console.log('Instruction type:', instructionType);
+        
+        // Set the CPU state in the animation controller for real data integration
+        instructionAnimationController.setCPUState(cpu);
+        
+        // Check if multi-circle animation is supported for this instruction
+        const supportsMultiCircle = instructionAnimationController.supportsMultiCircleAnimation(instructionType);
+        console.log('Multi-circle animation supported:', supportsMultiCircle);
+          if (supportsMultiCircle) {
+          // Use enhanced multi-circle animation
+          console.log('Using multi-circle animation for:', instructionType);
+          
+          // Set up animation state
+          setShowStageAnimation(true);
+          startAnimation(instructionType);
+          
+          // Set current CPU state for data integration
+          instructionAnimationController.setCPUState(cpu);
+            // Execute multi-circle animation
+          await instructionAnimationController.executeInstruction(instructionType);
+        } else {
+          // Fall back to traditional single-circle animation
+          console.log('Using traditional animation for:', instructionType);
+          
+          // Get stage sequence for this instruction
+          const stages = getStageSequenceForInstruction(instructionType);
+          console.log('Generated stages:', stages.length, stages.map(s => s.name));
+          
+          const adjustedStages = adjustStageDurations(stages, animationSpeed);
+          console.log('Adjusted stages with speed', animationSpeed, ':', adjustedStages.map(s => `${s.name}(${s.duration}ms)`));
+          
+          // Set up animation stages
+          setCurrentAnimationStages(adjustedStages);
+          setShowStageAnimation(true);
+            // Start store animation state
+          startAnimation(instructionType);
+          
+          // Set current CPU state for data integration  
+          instructionAnimationController.setCPUState(cpu);
+          
+          console.log('Animation setup complete, starting traditional animation...');
+            // Execute the traditional animation
+          await instructionAnimationController.executeInstruction(instructionType);
+          
+          // Clear the timeout since animation completed successfully
+          clearTimeout(animationTimeout);
+        }
+      } catch (error) {
+        console.error('Animation error:', error);
+        // Clear timeout and reset state on error
+        clearTimeout(animationTimeout);
+        setIsAnimating(false);
+        setShowStageAnimation(false);
+        stopAnimation();
+        setIsAnimating(false);
+        setShowStageAnimation(false);
+        stopAnimation();
+      }
+    } else {
+      console.log('No current instruction, executing step directly');
+      // No current instruction, just execute the step
+      step();
     }
   };
 
@@ -1072,10 +1274,9 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.BLACK}
       />
     </g>
-  );
-  // Individual component drawing functions converted from Java SingleCycleVis.java
+  );  // Individual component drawing functions converted from Java SingleCycleVis.java
   const drawPC = (highlight: boolean) => (
-    <g>
+    <g {...addComponentAttribute('PC')}>
       <Rectangle 
         x={components.PC.x}
         y={components.PC.y}
@@ -1100,7 +1301,7 @@ const CPUDatapath: React.FC = () => {
   );
 
   const drawInsMem = (highlightLeft: boolean, highlightRight: boolean) => (
-    <g>
+    <g {...addComponentAttribute('InsMem')}>
       <Rectangle 
         x={components.InsMem.x}
         y={components.InsMem.y}
@@ -1134,9 +1335,8 @@ const CPUDatapath: React.FC = () => {
       </text>
     </g>
   );
-
   const drawRegFile = (highlightLeft: boolean, highlightRight: boolean) => (
-    <g>
+    <g {...addComponentAttribute('RegFile')}>
       <Rectangle 
         x={components.RegFile.x}
         y={components.RegFile.y}
@@ -1216,28 +1416,6 @@ const CPUDatapath: React.FC = () => {
         stroke={COLORS.BLACK}
         highlight={highlight}
       />
-      {/* <text 
-        x={components.ALUPC.x + components.ALUPC.width/2}
-        y={components.ALUPC.y + components.ALUPC.height/2 - 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        Add
-      </text>
-      <text 
-        x={components.ALUPC.x + components.ALUPC.width/2}
-        y={components.ALUPC.y + components.ALUPC.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        4
-      </text> */}
     </g>
   );
 
@@ -1251,17 +1429,6 @@ const CPUDatapath: React.FC = () => {
         stroke={COLORS.BLACK}
         highlight={highlight}
       />
-      {/* <text 
-        x={components.ALUBranch.x + components.ALUBranch.width/2}
-        y={components.ALUBranch.y + components.ALUBranch.height/2 - 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        Add
-      </text> */}
     </g>
   );
 
@@ -1381,28 +1548,6 @@ const CPUDatapath: React.FC = () => {
         fill={highlight ? COLORS.ARM_BLUE : COLORS.WHITE}
         strokeWidth={2}
       />
-      {/* <text 
-        x={components.ALUControl.x + components.ALUControl.width/2}
-        y={components.ALUControl.y + components.ALUControl.height/2 - 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        ALU
-      </text>
-      <text 
-        x={components.ALUControl.x + components.ALUControl.width/2}
-        y={components.ALUControl.y + components.ALUControl.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        control
-      </text> */}
     </g>
   );
 
@@ -1415,28 +1560,6 @@ const CPUDatapath: React.FC = () => {
         height={components.SignExtend.height}
         highlight={highlight}
       />
-      {/* <text 
-        x={components.SignExtend.x + components.SignExtend.width/2}
-        y={components.SignExtend.y + components.SignExtend.height/2 - 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        Sign
-      </text>
-      <text 
-        x={components.SignExtend.x + components.SignExtend.width/2}
-        y={components.SignExtend.y + components.SignExtend.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={highlight ? COLORS.WHITE : COLORS.BLACK}
-      >
-        extend
-      </text> */}
     </g>
   );
 
@@ -2636,8 +2759,7 @@ const CPUDatapath: React.FC = () => {
         {/* Draw text labels */}
         <TextLabels />
 
-        {/* Draw control signal values */}
-        <ControlSignalValues 
+        {/* Draw control signal values */}        <ControlSignalValues 
           controlConfig={cpu.controlSignals}
           flags_flagAnd="0"
           flagAnd_branchOr="0"
@@ -2645,8 +2767,78 @@ const CPUDatapath: React.FC = () => {
           zeroAnd_branchOr="0"
           branchOr_PCMux="0"
           ALUMain={cpu.controlSignals.aluOp || "ADD"}
-        />
-
+        />        {/* Animation Components Layer */}
+        {(showStageAnimation || isAnimating || activeCircles.size > 0) && (
+          <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Component Highlighter */}
+            <ComponentHighlighter
+              highlights={highlightedComponents}
+              componentCoordinates={components}
+              allowMultipleHighlights={true}
+            />{/* Multi-Circle Animation - NEW */}
+            {activeCircles.size > 0 && (
+              <CircleManager
+                circles={activeCircles}
+                isAnimating={isAnimating}
+                onCircleComplete={(circleId: string) => {
+                  console.log('Circle completed:', circleId);
+                }}
+                onCircleMove={(circleId: string, position: { x: number; y: number }) => {
+                  console.log('Circle moved:', circleId, 'to', position);
+                }}
+              />
+            )}            {/* Traditional Single Animation Circle - FALLBACK */}
+            {animationPath.length > 0 && (
+              <AnimationCircle
+                path={animationPath}
+                duration={currentStageDuration}
+                onComplete={() => {
+                  // Do nothing - completion is handled by the instruction animation controller
+                  // This prevents double completion callbacks
+                }}
+                size={12}
+                isVisible={isAnimating}
+              />
+            )}
+          </g>
+        )}        {/* Debug info for animation state */}
+        {(isAnimating || activeCircles.size > 0) && (
+          <g>
+            <text 
+              x={50} 
+              y={50} 
+              fill="red" 
+              fontSize="15"
+            >
+              Animation Active: Path Length = {animationPath.length}
+            </text>
+            <text 
+              x={50} 
+              y={70} 
+              fill="red" 
+              fontSize="12"
+            >
+              Duration: {currentStageDuration}ms
+            </text>
+            <text 
+              x={50} 
+              y={90} 
+              fill="blue" 
+              fontSize="12"
+            >
+              Active Circles: {activeCircles.size}
+            </text>
+            {animationPath.length > 0 && (
+              <text 
+                x={50} 
+                y={110} 
+                fill="red" 
+                fontSize="10"
+              >
+                Path: {animationPath[0].x.toFixed(0)},{animationPath[0].y.toFixed(0)} to {animationPath[animationPath.length-1].x.toFixed(0)},{animationPath[animationPath.length-1].y.toFixed(0)}
+              </text>
+            )}
+          </g>
+        )}
        
       </svg>
 
@@ -2706,9 +2898,7 @@ const CPUDatapath: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Status Panel */}
+      )}      {/* Status Panel */}
       <div className="absolute bottom-4 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg min-w-[200px] z-20">
         <div className="text-sm font-semibold text-gray-800 mb-2">CPU Status</div>
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2723,6 +2913,28 @@ const CPUDatapath: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Next Step Button */}
+      <div className="absolute bottom-4 right-4 z-20">
+        <button
+          onClick={handleNextStep}
+          disabled={isAnimating}
+          className={`px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-all duration-200 ${
+            isAnimating 
+              ? 'bg-gray-400 cursor-not-allowed' 
+              : 'bg-blue-600 hover:bg-blue-700 hover:shadow-xl active:scale-95'
+          }`}
+        >
+          {isAnimating ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Animating...</span>
+            </div>
+          ) : (
+            'Next Step'
+          )}
+        </button>
       </div>
     </div>
 
