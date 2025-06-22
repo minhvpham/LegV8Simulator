@@ -269,7 +269,7 @@ export class InstructionAnimationController {
       console.error(`Error executing ${operation.type} operation:`, error);
       // Continue with the animation even if one operation fails
     }
-  }/**
+  }  /**
    * Execute split operation: one circle becomes multiple circles
    */
   private async executeSplitOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
@@ -277,15 +277,68 @@ export class InstructionAnimationController {
     
     let sourceCircle: DataCircle | undefined;
     
-    // Try to find source circle by ID first
+    // Try to find source circle by ID first (exact match)
     if (operation.sourceCircleIds.length > 0) {
-      sourceCircle = this.activeCircles.get(operation.sourceCircleIds[0]);
+      const targetId = operation.sourceCircleIds[0];
+      sourceCircle = this.activeCircles.get(targetId);
+      
+      // If not found by exact ID, try to find by data type or pattern
+      if (!sourceCircle) {
+        const activeCircles = Array.from(this.activeCircles.values());
+        
+        // For ID stage, look for instruction circle at InsMem
+        if (stageName.includes('Decode') || stageName.includes('ID')) {
+          sourceCircle = activeCircles.find(circle => 
+            circle.dataType === 'instruction' || 
+            circle.dataValue.toString().includes('INSTRUCTION') ||
+            (circle as any).currentComponent === 'InsMem'
+          );
+          
+          if (sourceCircle) {
+            console.log('Found instruction circle for ID stage:', sourceCircle.id, 'with data:', sourceCircle.dataValue);
+          }
+        }
+        
+        // General fallback: look for circle by type matching the requested ID
+        if (!sourceCircle) {
+          if (targetId.includes('instruction')) {
+            sourceCircle = activeCircles.find(circle => circle.dataType === 'instruction');
+          } else if (targetId.includes('pc')) {
+            sourceCircle = activeCircles.find(circle => circle.dataType === 'pc_value');
+          }
+        }
+      }
     }
     
-    // If no source circle specified or found, use the first active circle (initial circle)
+    // If no source circle specified or found, use context-appropriate fallback
     if (!sourceCircle && this.activeCircles.size > 0) {
-      sourceCircle = Array.from(this.activeCircles.values())[0];
-      console.log('Split using first active circle as source:', sourceCircle.id);
+      const activeCircles = Array.from(this.activeCircles.values());
+      
+      // For ID stage, prioritize instruction circles
+      if (stageName.includes('Decode') || stageName.includes('ID')) {
+        sourceCircle = activeCircles.find(circle => 
+          circle.dataType === 'instruction' || 
+          circle.dataValue.toString().includes('INSTRUCTION')
+        );
+        
+        if (sourceCircle) {
+          console.log('ID stage using instruction circle as source:', sourceCircle.id);
+        } else {
+          // Look for any circle at InsMem component
+          sourceCircle = activeCircles.find(circle => 
+            (circle as any).currentComponent === 'InsMem'
+          );
+          if (sourceCircle) {
+            console.log('ID stage using circle at InsMem:', sourceCircle.id);
+          }
+        }
+      }
+      
+      // General fallback: use first active circle
+      if (!sourceCircle) {
+        sourceCircle = activeCircles[0];
+        console.log('Split using first active circle as source:', sourceCircle.id);
+      }
     }
       // If still no source circle, this might be the start of a new instruction
     // Create a default source circle at PC for instructions that start with splits
@@ -361,12 +414,26 @@ export class InstructionAnimationController {
       this.activeCircles.set(newCircle.id, newCircle);
       this.callbacks.onCircleCreate(newCircle);      // Create move animation for each new circle
       const targetPosition = this.getPositionWithOffset(splitResult.targetComponent, i);
-      // Use the target component from the operation for better wire path calculation
-      const sourceComponent = operation.targetComponent || 'PC';
-      const wirePath = this.getWirePathBetweenComponents(
-        sourceComponent,
-        splitResult.targetComponent
-      );
+      
+      // Resolve wire path - check if it's a wire path object or coordinate array
+      let wirePath: Point[];
+      if (splitResult.wirePath) {
+        if (Array.isArray(splitResult.wirePath)) {
+          // Direct coordinate array
+          wirePath = splitResult.wirePath;
+        } else if (splitResult.wirePath && typeof splitResult.wirePath.getPathPoints === 'function') {
+          // Wire path object - resolve using current components and verticalLines
+          wirePath = this.resolveWirePathObject(splitResult.wirePath);
+        } else {
+          // Fallback to old method
+          const sourceComponent = operation.targetComponent || 'PC';
+          wirePath = this.getWirePathBetweenComponents(sourceComponent, splitResult.targetComponent);
+        }
+      } else {
+        // Fallback to old method
+        const sourceComponent = operation.targetComponent || 'PC';
+        wirePath = this.getWirePathBetweenComponents(sourceComponent, splitResult.targetComponent);
+      }
 
       console.log(`Creating animation for circle ${newCircle.id} to component ${splitResult.targetComponent}`);      animations.push({
         circleId: newCircle.id,
@@ -576,20 +643,32 @@ export class InstructionAnimationController {
     if (!sourceCircle) {
       console.warn('Transform operation failed: no source circle found');
       return;
-    }
-
-    // Resolve the new data value from the operation's resultData
+    }    // Resolve the new data value from the operation's resultData
     let newValue = sourceCircle.dataValue;
+    let newDataType = sourceCircle.dataType;
+    
     if (operation.resultData) {
       newValue = this.resolveDataValue(operation.resultData, sourceCircle.dataType, operation.targetComponent);
+      
+      // Set appropriate data type based on the result and target component
+      if (operation.targetComponent === 'InsMem' && operation.resultData.toString().includes('INSTRUCTION')) {
+        newDataType = 'instruction';
+      } else if (operation.targetComponent === 'ALUPC' && operation.resultData.toString().includes('PC_PLUS_4')) {
+        newDataType = 'pc_value';
+      } else if (operation.targetComponent === 'Control') {
+        newDataType = 'control_signal';
+      } else if (operation.targetComponent === 'SignExtend') {
+        newDataType = 'immediate';
+      } else if (operation.targetComponent === 'RegFile') {
+        newDataType = 'register_data';
+      }
     }
     
-    console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue}`);
+    console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
 
-    // Update circle data
+    // Update circle data and type
     sourceCircle.dataValue = newValue;
-
-    // Move to target component if specified
+    sourceCircle.dataType = newDataType;    // Move to target component if specified
     if (operation.targetComponent) {
       const targetPos = this.getComponentPosition(operation.targetComponent);
       
@@ -604,6 +683,9 @@ export class InstructionAnimationController {
           this.callbacks.onCircleUpdate(sourceCircle);
         }
       };
+      
+      // Mark the circle's current component
+      (sourceCircle as any).currentComponent = operation.targetComponent;
       
       await this.animationSequencer.executeSequential([moveAnimation]);
     } else {
@@ -678,14 +760,32 @@ export class InstructionAnimationController {
     if (!sourceCircle) {
       console.warn('Move operation failed: no source circle found');
       return;
-    }
-
-    // Get target position and create wire path
+    }    // Get target position and create wire path
     const targetPosition = this.getComponentPosition(operation.targetComponent);
-    const wirePath = this.getWirePathBetweenComponents(
-      this.getComponentNameFromPosition(sourceCircle.position),
-      operation.targetComponent
-    );
+    
+    // Resolve wire path - check if operation has specific wire path
+    let wirePath: Point[];
+    if (operation.wirePath) {
+      if (Array.isArray(operation.wirePath)) {
+        // Direct coordinate array
+        wirePath = operation.wirePath;
+      } else if (operation.wirePath && typeof operation.wirePath.getPathPoints === 'function') {
+        // Wire path object - resolve using current components and verticalLines
+        wirePath = this.resolveWirePathObject(operation.wirePath);
+      } else {
+        // Fallback to old method
+        wirePath = this.getWirePathBetweenComponents(
+          this.getComponentNameFromPosition(sourceCircle.position),
+          operation.targetComponent
+        );
+      }
+    } else {
+      // Fallback to old method
+      wirePath = this.getWirePathBetweenComponents(
+        this.getComponentNameFromPosition(sourceCircle.position),
+        operation.targetComponent
+      );
+    }
 
     // Create animation using sequencer
     const animation: CircleAnimation = {
@@ -1187,50 +1287,78 @@ export class InstructionAnimationController {
       return placeholderValue;
     }
 
-    try {
-      switch (placeholderValue.toString().toUpperCase()) {
+    try {      switch (placeholderValue.toString().toUpperCase()) {
         case 'PC_VALUE':
+        case 'D_PC_VALUE':
           return CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' }).value;
         
         case 'INSTRUCTION':
+        case 'D_INSTRUCTION':
           return CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState).value;
         
         case 'PC+4':
+        case 'D_PC_PLUS_4':
           const pcValue = this.cpuState.pc;
           return `0x${(pcValue + 4).toString(16).toUpperCase().padStart(8, '0')}`;
-        
-        case 'OPCODE':
+          case 'OPCODE':
+        case 'D_OPCODE':
           const instruction = this.cpuState.currentInstruction;
           return instruction ? instruction.assembly.split(' ')[0].toUpperCase() : 'NOP';
         
-        case 'RN_FIELD':
+        // Control signals
+        case 'C_ALUSRC_1':
+          return 'C_ALUSrc=1';
+        case 'C_ALUOP':
+          return 'C_ALUOp';
+        case 'C_MEMREAD_0':
+          return 'C_MemRead=0';
+        case 'C_MEMWRITE_0':
+          return 'C_MemWrite=0';
+        case 'C_MEMTOREG_0':
+          return 'C_MemToReg=0';
+        case 'C_REGWRITE_1':
+          return 'C_RegWrite=1';
+        case 'C_BRANCHSELECT_0':
+          return 'C_BranchSelect=0';
+          case 'RN_FIELD':
         case 'RM_FIELD':
         case 'RD_FIELD':
+        case 'D_RN_IDX':
+        case 'D_RM_IDX':
+        case 'D_RT_IDX_MUX':
+        case 'D_WRITE_ADDR_IDX':
           // Extract register fields from current instruction
           if (this.cpuState.currentInstruction) {
             const fields = CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState);
             const assembly = fields.value.toString();
             const parts = assembly.split(/[\s,]+/);
             
-            if (placeholderValue === 'RD_FIELD' && parts.length > 1) {
+            if ((placeholderValue === 'RD_FIELD' || placeholderValue === 'D_WRITE_ADDR_IDX') && parts.length > 1) {
               return parts[1]; // First register (destination)
-            } else if (placeholderValue === 'RN_FIELD' && parts.length > 2) {
+            } else if ((placeholderValue === 'RN_FIELD' || placeholderValue === 'D_RN_IDX') && parts.length > 2) {
               return parts[2]; // Second register (source 1)
-            } else if (placeholderValue === 'RM_FIELD' && parts.length > 3) {
+            } else if ((placeholderValue === 'RM_FIELD' || placeholderValue === 'D_RM_IDX' || placeholderValue === 'D_RT_IDX_MUX') && parts.length > 3) {
               return parts[3]; // Third register (source 2)
             }
           }
-          return 'X0';
-          case 'IMM_FIELD':
+          return 'X0';          case 'IMM_FIELD':
+          case 'D_IMM':
+          case 'D_FUNCT':
           // Extract immediate value from current instruction
           if (this.cpuState.currentInstruction) {
             const assembly = this.cpuState.currentInstruction.assembly;
-            const immMatch = assembly.match(/#(-?\d+)/);
-            if (immMatch) {
-              return `#${immMatch[1]}`;
+            if (placeholderValue.toString().toUpperCase() === 'D_FUNCT') {
+              // For function code, return the operation type
+              return assembly.split(' ')[0].toUpperCase();
+            } else {
+              // For immediate values
+              const immMatch = assembly.match(/#(-?\d+)/);
+              if (immMatch) {
+                return `#${immMatch[1]}`;
+              }
             }
           }
-          return '#0';
+          return placeholderValue.toString().toUpperCase() === 'D_FUNCT' ? 'ADD' : '#0';
         
         case 'REG_VALUE':
           // Get register value - for ADDI, this would be the source register value
@@ -1414,6 +1542,32 @@ export class InstructionAnimationController {
       x: basePosition.x + Math.cos(angle) * offsetDistance,
       y: basePosition.y + Math.sin(angle) * offsetDistance
     };
+  }
+
+  /**
+   * Resolve wire path object to coordinate array using current components and verticalLines
+   */
+  private resolveWirePathObject(wirePathObj: { getPathPoints: (components: any, verticalLines: any) => Point[] }): Point[] {
+    try {
+      // Get current components and verticalLines from the wire path calculator or use fallback
+      let components: any = {};
+      let verticalLines: any = {};
+      
+      if (this.wirePathCalculator && this.wirePathCalculator.getComponents) {
+        components = this.wirePathCalculator.getComponents();
+      }
+      
+      if (this.wirePathCalculator && this.wirePathCalculator.getVerticalLines) {
+        verticalLines = this.wirePathCalculator.getVerticalLines();
+      }
+      
+      // Call the wire path object's getPathPoints function with current data
+      return wirePathObj.getPathPoints(components, verticalLines);
+    } catch (error) {
+      console.error('Error resolving wire path object:', error);
+      // Return empty array as fallback
+      return [];
+    }
   }
 }
 

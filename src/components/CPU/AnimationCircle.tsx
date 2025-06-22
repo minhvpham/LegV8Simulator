@@ -40,7 +40,7 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
   // Format display text
   const getDisplayText = (value: string | number): string => {
     const str = value.toString();
-    if (str.length <= 8) return str;
+    if (str.length <= 12) return str;
     
     // Smart truncation based on data type
     if (str.startsWith('0x')) {
@@ -49,7 +49,20 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
     if (str.includes(' ')) {
       return str.split(' ')[0]; // First word for instructions
     }
-    return `${str.slice(0, 6)}...`;
+    return str.length > 12 ? `${str.slice(0, 9)}...` : str;
+  };
+
+  // Calculate rectangle dimensions based on text content
+  const calculateRectDimensions = (text: string) => {
+    const charWidth = 6; // Average character width in pixels
+    const padding = 8; // Horizontal padding
+    const minWidth = 24; // Minimum width
+    const height = 18; // Fixed height
+    
+    const textWidth = text.length * charWidth;
+    const width = Math.max(minWidth, textWidth + padding);
+    
+    return { width, height };
   };
 
   // Get text color based on background
@@ -111,13 +124,13 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
       }
     };
   }, [path, isAnimating, onComplete, onMove]);
-
   if (!circle.isActive) {
     return null;
   }
 
   const displayText = getDisplayText(circle.dataValue);
   const textColor = getTextColor(circle.color);
+  const { width, height } = calculateRectDimensions(displayText);
 
   return (
     <g 
@@ -125,15 +138,18 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
       transform={`translate(${circle.position.x}, ${circle.position.y})`}
       opacity={circle.opacity}
     >
-      {/* Circle background */}
-      <circle
-        cx={0}
-        cy={0}
-        r={circle.size}
+      {/* Rectangle background */}
+      <rect
+        x={-width / 2}
+        y={-height / 2}
+        width={width}
+        height={height}
         fill={circle.color}
         stroke="#333"
-        strokeWidth={2}
-        filter="drop-shadow(2px 2px 4px rgba(0,0,0,0.3))"
+        strokeWidth={1}
+        rx={3}
+        ry={3}
+        filter="drop-shadow(1px 1px 3px rgba(0,0,0,0.3))"
       />
       
       {/* Data value text */}
@@ -143,18 +159,17 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
         textAnchor="middle"
         dominantBaseline="middle"
         fill={textColor}
-        fontSize={circle.size > 15 ? "10px" : "8px"}
+        fontSize="10px"
         fontWeight="bold"
         fontFamily="monospace"
       >
         {displayText}
       </text>
-      
-      {/* Optional type indicator */}
-      {circle.size > 20 && (
+        {/* Optional type indicator */}
+      {width > 30 && (
         <text
           x={0}
-          y={circle.size + 12}
+          y={height / 2 + 12}
           textAnchor="middle"
           fill="#666"
           fontSize="8px"
@@ -180,8 +195,7 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
   color = '#10B981',
   opacity = 1,
   showText = true
-}) => {
-  const circleRef = useRef<SVGCircleElement>(null);
+}) => {  const circleRef = useRef<SVGRectElement>(null);
   const textRef = useRef<SVGTextElement>(null);
   const animationRef = useRef<gsap.core.Timeline | null>(null);
 
@@ -269,19 +283,31 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
   if (!isVisible) {
     return null;
   }
-
   const displayText = getDisplayText();
   const textColor = color === '#EF4444' || color === '#3B82F6' || color === '#8B5CF6' ? '#FFFFFF' : '#000000';
+  
+  // Calculate rectangle dimensions for the original circle too
+  const charWidth = 6;
+  const padding = 8;
+  const minWidth = 24;
+  const height = 18;
+  const textWidth = displayText.length * charWidth;
+  const width = Math.max(minWidth, textWidth + padding);
 
   return (
     <g>
-      <circle
+      <rect
         ref={circleRef}
-        r={size}
+        x={-width / 2}
+        y={-height / 2}
+        width={width}
+        height={height}
         fill={color}
         stroke="#333"
-        strokeWidth={2}
-        filter="drop-shadow(2px 2px 4px rgba(0,0,0,0.3))"
+        strokeWidth={1}
+        rx={3}
+        ry={3}
+        filter="drop-shadow(1px 1px 3px rgba(0,0,0,0.3))"
         style={{ opacity: 0 }}
       />
       {displayText && (
@@ -290,7 +316,7 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
           textAnchor="middle"
           dominantBaseline="middle"
           fill={textColor}
-          fontSize={size > 15 ? "10px" : "8px"}
+          fontSize="10px"
           fontWeight="bold"
           fontFamily="monospace"
           style={{ opacity: 0 }}

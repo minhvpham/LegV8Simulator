@@ -21,6 +21,9 @@ export interface ComponentInfo {
 export class ComponentRegistry {
   private components: Map<string, ComponentInfo> = new Map();
   private scale: number = 1;
+  // Store raw components and verticalLines for wire path resolution
+  private rawComponents: any = {};
+  private rawVerticalLines: any = {};
   /**
    * Initialize the component registry with scaled coordinates
    * @param components Component coordinates object from CPUDatapath
@@ -30,6 +33,12 @@ export class ComponentRegistry {
   initialize(components: any, verticalLines: any, scale: number): void {
     this.scale = scale;
     this.components.clear();
+    
+    // Store raw data for wire path resolution
+    this.rawComponents = components;
+    this.rawVerticalLines = verticalLines;
+    this.rawComponents = components;
+    this.rawVerticalLines = verticalLines;
 
     // Initialize wire path calculator with the same data
     wirePathCalculator.initialize(components, verticalLines, scale);
@@ -152,6 +161,22 @@ export class ComponentRegistry {
    */
   getScale(): number {
     return this.scale;
+  }
+
+  /**
+   * Get raw components data for wire path resolution
+   * @returns Raw components object passed during initialization
+   */
+  getComponents(): any {
+    return this.rawComponents;
+  }
+
+  /**
+   * Get raw vertical lines data for wire path resolution
+   * @returns Raw verticalLines object passed during initialization
+   */
+  getVerticalLines(): any {
+    return this.rawVerticalLines;
   }
 }
 

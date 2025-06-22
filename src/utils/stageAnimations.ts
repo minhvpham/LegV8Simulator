@@ -12,7 +12,7 @@ export interface ExecutionStage {
 
 export interface AnimationStep {
   stage: ExecutionStage;
-  wirePath: Point[];
+  wirePath: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
   highlights: ComponentHighlight[];
 }
 

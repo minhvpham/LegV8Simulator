@@ -35,8 +35,16 @@ export interface SplitOperation {
   newValue: any;
   newType: string;
   targetComponent: string;
-  wirePath: Point[];
+  wirePath: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
   location: string;
+}
+
+export interface SplitResult {
+  id: string;
+  dataValue: any;
+  dataType: string;
+  targetComponent: string;
+  wirePath?: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
 }
 
 export interface DataFlowOperation {
@@ -45,14 +53,18 @@ export interface DataFlowOperation {
   sourceCircleIds: string[];
   targetComponent: string;
   resultData?: any;
+  targetDataValue?: any;
+  targetDataType?: string;
   splitResults?: SplitOperation[];
+  results?: SplitResult[];
+  wirePath?: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
 }
 
 export interface StageDataFlow {
   stageName: string;
-  initialCircles: string[];
+  initialCircles?: string[];
   operations: DataFlowOperation[];
-  finalCircles: string[];
+  finalCircles?: string[];
   duration: number;
   simultaneousFlows: boolean;
 }
@@ -126,12 +138,11 @@ export const EXECUTION_STAGES = {
 
 export type ExecutionStageName = keyof typeof EXECUTION_STAGES;
 
-export interface ExecutionStage {
-  name: string;
+export interface ExecutionStage {  name: string;
   description: string;
   sourceComponent: string;
   targetComponent: string;
   activatedComponents: string[];
-  wirePath: Point[];
+  wirePath: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
   duration: number;
 }

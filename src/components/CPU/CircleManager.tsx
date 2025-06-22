@@ -18,25 +18,18 @@ const CircleManager: React.FC<CircleManagerProps> = ({
   isAnimating,
   onCircleComplete,
   onCircleMove
-}) => {
-  // Group circles by data type for organized rendering
+}) => {  // Group circles by data type for organized rendering
   const groupedCircles = React.useMemo(() => {
-    const groups: Record<string, DataCircle[]> = {
-      pc_value: [],
-      instruction: [],
-      register_data: [],
-      immediate: [],
-      address: [],
-      memory_data: [],
-      control_signal: []
-    };
+    const groups: Record<string, DataCircle[]> = {};
 
     Array.from(circles.values())
       .filter(circle => circle.isActive)
       .forEach(circle => {
-        if (groups[circle.dataType]) {
-          groups[circle.dataType].push(circle);
+        // Create group if it doesn't exist
+        if (!groups[circle.dataType]) {
+          groups[circle.dataType] = [];
         }
+        groups[circle.dataType].push(circle);
       });
 
     return groups;
