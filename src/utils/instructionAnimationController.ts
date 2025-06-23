@@ -378,9 +378,17 @@ export class InstructionAnimationController {
       
       await this.animationSequencer.executeSequential([fadeInAnimation]);
     }
-    
-    if (!sourceCircle || !operation.splitResults) {
-      console.warn('Split operation failed: no source circle or split results');
+      if (!sourceCircle || !operation.splitResults) {
+      console.error('🔴 SPLIT OPERATION FAILED!');
+      if (!sourceCircle) {
+        console.error('❌ No source circle found');
+        console.error('🔍 Requested ID:', operation.sourceCircleIds[0] || 'NONE');
+        console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
+      }
+      if (!operation.splitResults) {
+        console.error('❌ No split results defined in operation');
+      }
+      console.error('⚠️  Check flow definition and circle creation logic');
       return;
     }
 
@@ -490,51 +498,21 @@ export class InstructionAnimationController {
       sourceCircles = operation.sourceCircleIds
         .map(id => this.activeCircles.get(id))
         .filter(Boolean) as DataCircle[];
-    }
-      // If no source circles found by ID, use fallback: find circles that could be merged for this stage
+    }    // If no source circles found by ID, fail fast in development
     if (sourceCircles.length === 0) {
       const activeCircles = Array.from(this.activeCircles.values());
-      console.log(`No source circles found by ID. Active circles: ${activeCircles.length}`);
-      
-      // For Execute stage, find circles that represent operands (reg value, immediate)
-      if (stageName.toLowerCase().includes('execute') || stageName.toLowerCase().includes('ex')) {
-        // Specifically look for register_data and immediate circles for ADDI
-        const regValueCircle = activeCircles.find(circle => 
-          circle.dataType === 'register_data' && 
-          !circle.dataValue.toString().includes('XZR') && // Avoid XZR register
-          !circle.dataValue.toString().includes('x31') // Avoid x31 (also XZR)
-        );
-        
-        const immediateCircle = activeCircles.find(circle => 
-          circle.dataType === 'immediate' || 
-          circle.dataValue.toString().includes('#') ||
-          circle.stage === 'Instruction Decode (ID)'
-        );
-        
-        if (regValueCircle) sourceCircles.push(regValueCircle);
-        if (immediateCircle && immediateCircle.id !== regValueCircle?.id) {
-          sourceCircles.push(immediateCircle);
-        }
-        
-        // If we still don't have both operands, take the best available circles
-        if (sourceCircles.length === 0) {
-          sourceCircles = activeCircles.filter(circle => 
-            circle.dataType === 'register_data' || 
-            circle.dataType === 'immediate'
-          ).slice(0, 2);
-        }
-      } else {
-        // For other stages, take available circles
-        sourceCircles = activeCircles.slice(0, 2); // Take first two circles
-      }
-      
-      console.log(`Using fallback source circles: ${sourceCircles.length}`, sourceCircles.map(c => ({ id: c.id, data: c.dataValue, type: c.dataType })));
+      console.error('🔴 MERGE OPERATION FAILED - No source circles found by ID!');
+      console.error('🔍 Requested IDs:', operation.sourceCircleIds);
+      console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
+      console.error('⚠️  This indicates a bug in the flow definition or circle creation logic');
+      return;
     }
 
     if (sourceCircles.length === 0) {
-      console.warn('Merge operation failed: no source circles found');
+      console.error('🔴 MERGE OPERATION FAILED - No source circles available!');
+      console.error('⚠️  This should never happen - check circle creation logic');
       return;
-    }    // Get target position for merge
+    }// Get target position for merge
     const targetPosition = this.getPositionWithOffset(operation.targetComponent, 0);
     
     // Create animations to move all source circles to merge point
@@ -561,13 +539,17 @@ export class InstructionAnimationController {
     if (operation.resultData) {
       resolvedData = this.resolveDataValue(operation.resultData, 'register_data', operation.targetComponent);
     }
-    
-    const mergedCircle = this.circleManager.createCircle(
+      const mergedCircle = this.circleManager.createCircle(
       resolvedData,
       'register_data', // Default type, could be determined from operation
       targetPosition,
       stageName
     );
+
+    // Set the proper ID based on resultData if specified
+    if (operation.resultData) {
+      mergedCircle.id = operation.resultData;
+    }
 
     this.activeCircles.set(mergedCircle.id, mergedCircle);
     
@@ -594,56 +576,80 @@ export class InstructionAnimationController {
       this.callbacks.onCircleDestroy(circle.id);
     });
   }  /**
-   * Execute transform operation: circle changes its data content
-   */  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
-    console.log('Executing transform operation:', operation);
+   * Execute transform operation: circle changes its data content   */  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    console.log('=== TRANSFORM OPERATION DEBUG ===');
+    console.log('Operation:', operation);
+    console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
+    console.log('Target component:', operation.targetComponent);
+    
+    console.log('Current active circles:');
+    this.activeCircles.forEach((circle, id) => {
+      console.log(`  - ID: ${id}, DataType: ${circle.dataType}, DataValue: ${circle.dataValue}, Stage: ${circle.stage}`);
+    });
     
     let sourceCircle: DataCircle | undefined;
-    
-    // Try to find source circle by ID first
+      // Try to find source circle by ID first
     if (operation.sourceCircleIds.length > 0) {
-      sourceCircle = this.activeCircles.get(operation.sourceCircleIds[0]);
-    }
-      // If source circle not found by ID, try intelligent fallback selection
-    if (!sourceCircle && this.activeCircles.size > 0) {
-      const activeCircles = Array.from(this.activeCircles.values());
-      console.log(`Transform fallback: ${activeCircles.length} active circles available`);
+      const requestedId = operation.sourceCircleIds[0];
+      // First try exact match
+      sourceCircle = this.activeCircles.get(requestedId);
       
-      // For PC Update operations, prioritize circles that represent computation results
-      if (stageName.toLowerCase().includes('pc') || operation.resultData === 'NEW_PC') {
-        // Look for result, sum, or address circles first
-        sourceCircle = activeCircles.find(circle => 
-          circle.dataType === 'address' ||
-          circle.dataType === 'immediate' ||
-          circle.dataType === 'pc_value' ||
-          circle.dataValue.toString().includes('0x00400')
-        );
+      // If exact match fails, try to find by base name (case-insensitive)
+      if (!sourceCircle) {
+        const baseName = requestedId.toLowerCase();
+        console.log(`Transform: Exact match failed, searching for circles with base name '${baseName}'`);
+          // Try exact base name match first, also considering target component
+        this.activeCircles.forEach((circle, circleId) => {
+          if (!sourceCircle && circleId.toLowerCase().startsWith(baseName + '_')) {
+            // If target component is specified, prefer circles at that component
+            if (operation.targetComponent) {
+              const circleComponent = (circle as any).currentComponent;
+              if (circleComponent === operation.targetComponent) {
+                console.log(`Transform: Found matching circle by base name and component: ${circleId} at ${circleComponent}`);
+                sourceCircle = circle;
+                return;
+              }
+            }
+            // Fallback to first match if no component match
+            if (!sourceCircle) {
+              console.log(`Transform: Found matching circle by base name: ${circleId}`);
+              sourceCircle = circle;
+            }
+          }
+        });
         
-        // If still not found, use the most recently created circle
+        // If still not found, try partial matching (removing underscores and checking contains)
         if (!sourceCircle) {
-          sourceCircle = activeCircles.reduce((latest, current) => 
-            current.createdAtStage >= latest.createdAtStage ? current : latest
-          );
-        }
-      } else {
-        // For other transforms, try to find the most appropriate circle
-        // Look for circles from the most recent stage first
-        const currentStageCircles = activeCircles.filter(circle => circle.stage === stageName);
-        if (currentStageCircles.length > 0) {
-          sourceCircle = currentStageCircles[0];
-        } else {
-          // Fall back to any available circle
-          sourceCircle = activeCircles[0];
+          const cleanBaseName = baseName.replace(/_/g, '');
+          console.log(`Transform: Still not found, trying clean base name '${cleanBaseName}'`);
+          
+          this.activeCircles.forEach((circle, circleId) => {
+            if (!sourceCircle) {
+              const cleanCircleId = circleId.toLowerCase().replace(/_/g, '');
+              if (cleanCircleId.includes(cleanBaseName) || cleanBaseName.includes(cleanCircleId.split(/\d/)[0])) {
+                console.log(`Transform: Found matching circle by clean base name: ${circleId}`);
+                sourceCircle = circle;
+              }
+            }
+          });
         }
       }
       
-      console.log('Transform using fallback circle:', sourceCircle?.id, 'with data:', sourceCircle?.dataValue);
+      console.log(`Transform: Searching for circle with ID '${requestedId}':`, sourceCircle ? 'FOUND' : 'NOT FOUND');
     }
-    
+      // No fallback logic in development - fail fast with clear error
     if (!sourceCircle) {
-      console.warn('Transform operation failed: no source circle found');
+      console.error('🔴 TRANSFORM OPERATION FAILED - Circle ID not found!');
+      console.error('🔍 Requested ID:', operation.sourceCircleIds[0]);
+      console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
+      console.error('⚠️  This indicates a bug in the flow definition or circle creation logic');
       return;
-    }    // Resolve the new data value from the operation's resultData
+    }
+      if (!sourceCircle) {
+      console.error('🔴 TRANSFORM OPERATION FAILED - No source circle found!');
+      console.error('⚠️  This should never happen - check circle creation logic');
+      return;
+    }// Resolve the new data value from the operation's resultData
     let newValue = sourceCircle.dataValue;
     let newDataType = sourceCircle.dataType;
     
@@ -663,104 +669,149 @@ export class InstructionAnimationController {
         newDataType = 'register_data';
       }
     }
-    
-    console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
+      console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
 
-    // Update circle data and type
-    sourceCircle.dataValue = newValue;
-    sourceCircle.dataType = newDataType;    // Move to target component if specified
-    if (operation.targetComponent) {
-      const targetPos = this.getComponentPosition(operation.targetComponent);
+    // For transform operations with resultData, create a NEW circle with the result name
+    if (operation.resultData) {
+      // Create a new circle with the result data name
+      const newCircle = this.circleManager.createCircle(
+        newValue,
+        newDataType,
+        sourceCircle.position,
+        stageName,
+        sourceCircle.id // Parent ID
+      );
+        // Give it a proper ID based on the result data - use resultData directly as ID
+      newCircle.id = operation.resultData;
       
-      const moveAnimation: CircleAnimation = {
-        circleId: sourceCircle.id,
-        operation: 'move',
-        duration: 500 * this.animationSpeed,
-        startPosition: sourceCircle.position,
-        endPosition: targetPos,
-        onUpdate: (position: Point) => {
-          sourceCircle.position = position;
-          this.callbacks.onCircleUpdate(sourceCircle);
-        }
-      };
+      // Add to active circles
+      this.activeCircles.set(newCircle.id, newCircle);
+      this.callbacks.onCircleCreate(newCircle);
       
-      // Mark the circle's current component
-      (sourceCircle as any).currentComponent = operation.targetComponent;
+      // Remove the source circle
+      sourceCircle.isActive = false;
+      this.activeCircles.delete(sourceCircle.id);
+      this.callbacks.onCircleDestroy(sourceCircle.id);
       
-      await this.animationSequencer.executeSequential([moveAnimation]);
+      console.log(`Created new circle: ${newCircle.id} with value: ${newValue}`);
+      
+      // Move the new circle to target component if specified
+      if (operation.targetComponent) {
+        const targetPos = this.getComponentPosition(operation.targetComponent);
+        
+        const moveAnimation: CircleAnimation = {
+          circleId: newCircle.id,
+          operation: 'move',
+          duration: 500 * this.animationSpeed,
+          startPosition: newCircle.position,
+          endPosition: targetPos,
+          onUpdate: (position: Point) => {
+            newCircle.position = position;
+            this.callbacks.onCircleUpdate(newCircle);
+          }
+        };
+        
+        // Mark the new circle's current component
+        (newCircle as any).currentComponent = operation.targetComponent;
+        
+        await this.animationSequencer.executeSequential([moveAnimation]);
+      } else {
+        // Just update the circle data without movement
+        this.callbacks.onCircleUpdate(newCircle);
+      }
     } else {
-      // Just update the circle data without movement
-      this.callbacks.onCircleUpdate(sourceCircle);
+      // Legacy behavior: just update the existing circle
+      sourceCircle.dataValue = newValue;
+      sourceCircle.dataType = newDataType;
+
+      // Move to target component if specified
+      if (operation.targetComponent) {
+        const targetPos = this.getComponentPosition(operation.targetComponent);
+        
+        const moveAnimation: CircleAnimation = {
+          circleId: sourceCircle.id,
+          operation: 'move',
+          duration: 500 * this.animationSpeed,
+          startPosition: sourceCircle.position,
+          endPosition: targetPos,
+          onUpdate: (position: Point) => {
+            if (sourceCircle) {
+              sourceCircle.position = position;
+              this.callbacks.onCircleUpdate(sourceCircle);
+            }
+          }
+        };
+        
+        // Mark the circle's current component
+        (sourceCircle as any).currentComponent = operation.targetComponent;
+        
+        await this.animationSequencer.executeSequential([moveAnimation]);
+      } else {
+        // Just update the circle data without movement
+        this.callbacks.onCircleUpdate(sourceCircle);
+      }
     }
   }
   /**
    * Execute move operation: circle moves to a new component
-   */
-  private async executeMoveOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
-    console.log('Executing move operation:', operation);
+   */  private async executeMoveOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    console.log('=== MOVE OPERATION DEBUG ===');
+    console.log('Operation:', operation);
+    console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
+    console.log('Target component:', operation.targetComponent);    console.log('Current active circles:');
+    this.activeCircles.forEach((circle, id) => {
+      console.log(`  - ID: ${id}, DataType: ${circle.dataType}, DataValue: ${circle.dataValue}, Stage: ${circle.stage}`);
+    });
     
-    let sourceCircle: DataCircle | undefined;
-    
-    // Try to find source circle by ID first
+    let sourceCircle: DataCircle | undefined;      // Try to find source circle by ID first
     if (operation.sourceCircleIds.length > 0) {
-      sourceCircle = this.activeCircles.get(operation.sourceCircleIds[0]);
-    }
-      // If no source circle specified or found, find an appropriate fallback
-    if (!sourceCircle && this.activeCircles.size > 0) {
-      const activeCircles = Array.from(this.activeCircles.values());
-      console.log(`Move fallback: ${activeCircles.length} active circles available`);
-      
-      // Find the most appropriate circle to move based on the target component
-      if (stageName.toLowerCase().includes('execute') || stageName.toLowerCase().includes('ex')) {
-        if (operation.targetComponent === 'ALUMain') {
-          // For ALU moves, prefer register_data first, then immediate
-          sourceCircle = activeCircles.find(circle => 
-            circle.dataType === 'register_data' && 
-            !circle.dataValue.toString().includes('XZR') && // Avoid XZR register
-            !(circle as any).movedToALU // Haven't been moved to ALU yet
-          );
-          
-          if (!sourceCircle) {
-            sourceCircle = activeCircles.find(circle => 
-              circle.dataType === 'immediate' && 
-              !(circle as any).movedToALU // Haven't been moved to ALU yet
-            );
+      const requestedId = operation.sourceCircleIds[0];
+      // First try exact match
+      sourceCircle = this.activeCircles.get(requestedId);
+        // If exact match fails, try to find by base name (case-insensitive)
+      if (!sourceCircle) {
+        const baseName = requestedId.toLowerCase();
+        console.log(`Move: Exact match failed, searching for circles with base name '${baseName}'`);        // Try exact base name match first
+        this.activeCircles.forEach((circle, circleId) => {
+          if (!sourceCircle && circleId.toLowerCase().startsWith(baseName + '_')) {
+            console.log(`Move: Found matching circle by base name: ${circleId}`);
+            sourceCircle = circle;
           }
-        } else if (operation.targetComponent === 'MuxReadReg') {
-          // For MuxReadReg, prefer immediate values
-          sourceCircle = activeCircles.find(circle => 
-            circle.dataType === 'immediate' && 
-            !(circle as any).movedToMux // Haven't been moved to Mux yet
-          );
-        }
+        });
         
-        // Mark the selected circle as moved to prevent re-selection
-        if (sourceCircle) {
-          if (operation.targetComponent === 'ALUMain') {
-            (sourceCircle as any).movedToALU = true;
-          } else if (operation.targetComponent === 'MuxReadReg') {
-            (sourceCircle as any).movedToMux = true;
-          }
-        }
-        
-        // Final fallback for Execute stage
+        // If still not found, try partial matching (removing underscores and checking contains)
         if (!sourceCircle) {
-          sourceCircle = activeCircles.find(circle => 
-            circle.dataType === 'register_data' || circle.dataType === 'immediate'
-          ) || activeCircles[0];
+          const cleanBaseName = baseName.replace(/_/g, '');
+          console.log(`Move: Still not found, trying clean base name '${cleanBaseName}'`);
+          
+          this.activeCircles.forEach((circle, circleId) => {
+            if (!sourceCircle) {
+              const cleanCircleId = circleId.toLowerCase().replace(/_/g, '');
+              if (cleanCircleId.includes(cleanBaseName) || cleanBaseName.includes(cleanCircleId.split(/\d/)[0])) {
+                console.log(`Move: Found matching circle by clean base name: ${circleId}`);
+                sourceCircle = circle;
+              }
+            }
+          });
         }
-      } else {
-        // For non-Execute stages, use simpler logic
-        sourceCircle = activeCircles[0];
       }
       
-      console.log('Move using fallback circle:', sourceCircle?.id, 'with data:', sourceCircle?.dataValue, 'to component:', operation.targetComponent);
-    }
-    
-    if (!sourceCircle) {
-      console.warn('Move operation failed: no source circle found');
+      console.log(`Move: Searching for circle with ID '${requestedId}':`, sourceCircle ? 'FOUND' : 'NOT FOUND');
+    }// No fallback logic in development - fail fast with clear error
+    if (!sourceCircle && this.activeCircles.size > 0) {
+      console.error('🔴 MOVE OPERATION FAILED - Circle ID not found!');
+      console.error('🔍 Requested ID:', operation.sourceCircleIds[0]);
+      console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
+      console.error('⚠️  This indicates a bug in the flow definition or circle creation logic');
       return;
-    }    // Get target position and create wire path
+    }    if (!sourceCircle) {
+      console.error('🔴 MOVE OPERATION FAILED - No source circle found!');
+      console.error('⚠️  This should never happen - check circle creation logic');
+      return;
+    }
+
+    console.log(`FINAL SELECTION - Moving circle: ID='${sourceCircle.id}', DataValue='${sourceCircle.dataValue}', DataType='${sourceCircle.dataType}' to component '${operation.targetComponent}'`);
+    console.log('==============================');// Get target position and create wire path
     const targetPosition = this.getComponentPosition(operation.targetComponent);
     
     // Resolve wire path - check if operation has specific wire path

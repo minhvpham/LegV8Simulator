@@ -60,23 +60,29 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
         }
       ]
     },
-    
-    // Transform PC value at ALUPC to PC+4 (ALUPC automatically adds 4)
+      // Transform PC value at ALUPC to PC+4 (ALUPC automatically adds 4)
     {
       type: 'transform',
       timing: 300,
-      sourceCircleIds: [], // Controller finds PC value rectangle at ALUPC
+      sourceCircleIds: ['D_PC_Value'], // Use PC value that went to ALUPC
       targetComponent: 'ALUPC',
       resultData: 'D_PC_Plus_4' // ALUPC automatically adds 4 to PC value
-    },
-    
-    // Transform PC address at InsMem to actual instruction
+    },    // Transform PC address at InsMem to actual instruction
     {
       type: 'transform',
       timing: 400,
-      sourceCircleIds: [], // Controller finds PC address rectangle at InsMem
+      sourceCircleIds: ['D_PC_Value'], // Use PC value that went to InsMem
       targetComponent: 'InsMem',
       resultData: 'D_Instruction' // Fetched instruction (e.g., 0x8B030041 for ADD X1, X2, X3)
+    },
+
+    // Keep PC value at ALUBranch for potential branch calculations
+    {
+      type: 'transform',
+      timing: 200,
+      sourceCircleIds: ['D_PC_Value'], // Use PC value that went to ALUBranch
+      targetComponent: 'ALUBranch',
+      resultData: 'D_PC_Branch' // PC value for branch target calculation
     }
   ],
   finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'],

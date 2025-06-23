@@ -36,7 +36,7 @@ export function resolveWirePathCoordinates(wirePathObject: any, components: any,
  */
 export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   stageName: "Instruction Decode (ID)",
-  initialCircles: ['D_Instruction'], // From IF stage
+  initialCircles: ['D_Instruction', 'D_PC_Plus_4'], // From IF stage
   operations: [    // 7-way split of instruction word to different components
     {
       type: 'split',
@@ -94,14 +94,16 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
           location: 'InsMem->ALUControl'
         }
       ]    }
-  ],finalCircles: [
+  ],  finalCircles: [
+    'D_PC_Plus_4',          // From IF stage, needed for PC update
     'D_Opcode',              // At Control unit, ready for split
     'D_Rn_Idx',             // At RegFile Read1 port
     'D_Rm_Idx',             // At MuxReg2Loc input '0'
     'D_Rt_Idx_Mux',         // At MuxReg2Loc input '1'
     'D_Write_Addr_Idx',     // At RegFile Write port
     'D_Imm',                // At SignExtend
-    'D_Funct'               // At ALUControl
+    'D_Funct',               // At ALUControl
+    'D_PC_Branch' // Optional, if branch calculation needed
   ],
   duration: 500,
   simultaneousFlows: true

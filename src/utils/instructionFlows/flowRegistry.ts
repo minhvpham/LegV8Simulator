@@ -5,29 +5,29 @@ import { B_UNIVERSAL_FLOW } from './bUniversalFlow';
 import { CBZ_UNIVERSAL_FLOW } from './cbzUniversalFlow';
 import { BR_UNIVERSAL_FLOW } from './brUniversalFlow';
 
-// New detailed flows following exact workflow specification
+// New guideline flows following exact workflow specification
 // R-Format flows
-import { ADD_R_FORMAT_FLOW } from './addRFormatFlow_new';
-import { SUB_R_FORMAT_FLOW } from './subRFormatFlow';
-import { AND_R_FORMAT_FLOW } from './andRFormatFlow_new';
-import { ORR_R_FORMAT_FLOW } from './orrRFormatFlow_new';
-import { EOR_R_FORMAT_FLOW } from './eorRFormatFlow_new';
-import { LSL_R_FORMAT_FLOW } from './lslRFormatFlow_new';
-import { LSR_R_FORMAT_FLOW } from './lsrRFormatFlow_new';
+import { ADD_R_FORMAT_FLOW } from './addRFormatFlow_guideline';
+import { SUB_R_FORMAT_FLOW } from './subRFormatFlow_guideline';
+import { AND_R_FORMAT_FLOW } from './andRFormatFlow_guideline';
+import { ORR_R_FORMAT_FLOW } from './orrRFormatFlow_guideline';
+import { EOR_R_FORMAT_FLOW } from './eorRFormatFlow_guideline';
+import { LSL_R_FORMAT_FLOW } from './lslRFormatFlow_guideline';
+import { LSR_R_FORMAT_FLOW } from './lsrRFormatFlow_guideline';
 
 // I-Format flows
-import { ADDI_I_FORMAT_FLOW } from './addiIFormatFlow_new';
-import { SUBI_I_FORMAT_FLOW } from './subiIFormatFlow';
-import { ANDI_I_FORMAT_FLOW } from './andiIFormatFlow_new';
-import { ORRI_I_FORMAT_FLOW } from './orriIFormatFlow_new';
-import { EORI_I_FORMAT_FLOW } from './eoriIFormatFlow_new';
+import { ADDI_I_FORMAT_FLOW } from './addiIFormatFlow_guideline';
+import { SUBI_I_FORMAT_FLOW } from './subiIFormatFlow_guideline';
+import { ANDI_I_FORMAT_FLOW } from './andiIFormatFlow_guideline';
+import { ORRI_I_FORMAT_FLOW } from './orriIFormatFlow_guideline';
+import { EORI_I_FORMAT_FLOW } from './eoriIFormatFlow_guideline';
 
 // D-Format flows
-import { LDUR_D_FORMAT_FLOW } from './ldurDFormatFlow_new';
-import { STUR_D_FORMAT_FLOW } from './sturDFormatFlow_new';
+import { LDUR_D_FORMAT_FLOW } from './ldurDFormatFlow_guideline';
+import { STUR_D_FORMAT_FLOW } from './sturDFormatFlow_guideline';
 
 export const FLOW_REGISTRY: Record<string, any> = {
-  // R-Format instructions using detailed workflow-accurate flows
+  // R-Format instructions using guideline workflow-accurate flows
   ADD: ADD_R_FORMAT_FLOW,
   SUB: SUB_R_FORMAT_FLOW,
   AND: AND_R_FORMAT_FLOW,
@@ -36,14 +36,14 @@ export const FLOW_REGISTRY: Record<string, any> = {
   LSL: LSL_R_FORMAT_FLOW,
   LSR: LSR_R_FORMAT_FLOW,
   
-  // I-Format instructions using detailed workflow-accurate flows  
+  // I-Format instructions using guideline workflow-accurate flows  
   ADDI: ADDI_I_FORMAT_FLOW,
   SUBI: SUBI_I_FORMAT_FLOW,
   ANDI: ANDI_I_FORMAT_FLOW,
   ORRI: ORRI_I_FORMAT_FLOW,
   EORI: EORI_I_FORMAT_FLOW,
   
-  // D-Format instructions using detailed workflow-accurate flows
+  // D-Format instructions using guideline workflow-accurate flows
   LDUR: LDUR_D_FORMAT_FLOW,
   STUR: STUR_D_FORMAT_FLOW,
   

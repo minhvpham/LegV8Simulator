@@ -986,7 +986,45 @@ const CPUDatapath: React.FC = () => {
         y={components.MuxReadMem.y + components.MuxReadMem.width/2}
         xHead={components.MuxReadMem.x}
         color={COLORS.BLACK}
-      />      {/* ALUPC -> MuxPC (PC+4 result to PC multiplexer) */}
+      />
+
+      {/* ALUMain -> MuxReadMemData (ALU result to read data multiplexer) */}
+      <HorizontalSegment 
+        xStart={components.ALUMain.x + components.ALUMain.width}
+        y={components.ALUMain.y + 5*components.ALUMain.height/8}
+        xEnd={verticalLines.ZERO_AND_VERT_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.ZERO_AND_VERT_X}
+        yStart={components.ALUMain.y + 5*components.ALUMain.height/8}
+        yEnd={components.DataMem.y + components.DataMem.height + 15}
+        color={COLORS.BLACK}
+        joinStart={true}
+        joinEnd={true}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.ZERO_AND_VERT_X}
+        y={components.DataMem.y + components.DataMem.height + 15}
+        xEnd={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <VerticalSegment 
+        x={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        yStart={components.DataMem.y + components.DataMem.height + 15}
+        yEnd={components.MuxReadMem.y + components.MuxReadMem.height - components.MuxReadMem.width/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        y={components.MuxReadMem.y + components.MuxReadMem.height - components.MuxReadMem.width/2}
+        xHead={components.MuxReadMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUPC -> MuxPC (PC+4 result to PC multiplexer) */}
       <HorizontalSegment 
         xStart={components.ALUPC.x + components.ALUPC.width}
         y={components.ALUPC.y + components.ALUPC.height/2}
@@ -1931,53 +1969,6 @@ const CPUDatapath: React.FC = () => {
         fill={COLORS.BLACK}
       >
         data
-      </text>
-      
-      {/* Read Data labels */}
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.ALUMain.y + 3*components.ALUMain.height/16}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        Read
-      </text>
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.ALUMain.y + 3*components.ALUMain.height/16 + 10}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        data 1
-      </text>
-      
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.MuxReadReg.y + components.MuxReadReg.width/2}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        Read
-      </text>
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.MuxReadReg.y + components.MuxReadReg.width/2 + 10}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        data 2
       </text>
       
       {/* Data Memory labels */}
