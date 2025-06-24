@@ -78,8 +78,10 @@ export interface Point {
 // Component highlight interface for animation
 export interface ComponentHighlight {
   componentId: string;
-  highlightType: 'active' | 'processing' | 'complete';
+  highlightType: 'active' | 'processing' | 'complete' | 'split' | 'merge' | 'transform' | 'transfer';
   duration: number;
+  intensity?: number; // 0-1, for variable highlight intensity
+  wirePaths?: string[]; // Array of wire path IDs to highlight
 }
 
 export interface SimulatorState {

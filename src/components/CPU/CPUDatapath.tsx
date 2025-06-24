@@ -6,7 +6,8 @@ import { instructionAnimationController } from '../../utils/instructionAnimation
 import { getStageSequenceForInstruction, adjustStageDurations } from '../../utils/stageAnimations';
 import { DataCircle } from '../../types/animationTypes';
 import AnimationCircle from './AnimationCircle';
-import ComponentHighlighter from './ComponentHighlighter';
+import ComponentHighlighter, { ComponentHighlight } from './ComponentHighlighter';
+import WirePathHighlighter from './WirePathHighlighter';
 import CircleManager from './CircleManager';
 import { WirePathVisualizer, WirePathDebugPanel } from './WirePathVisualizer';
 import Rectangle from './BaseShape/Rectangle';
@@ -40,9 +41,10 @@ const CPUDatapath: React.FC = () => {
   const [currentAnimationStages, setCurrentAnimationStages] = useState<any[]>([]);
   const [currentStageDuration, setCurrentStageDuration] = useState(1000);
   const [showStageAnimation, setShowStageAnimation] = useState(false);
-    // Multi-circle animation state
+  // Multi-circle animation state
   const [activeCircles, setActiveCircles] = useState<Map<string, DataCircle>>(new Map());
   const [lastInstruction, setLastInstruction] = useState<string | null>(null);
+  const [highlightedWirePaths, setHighlightedWirePaths] = useState<string[]>([]);
   
   // Debug state for wire path visualization
   const [showWireDebug, setShowWireDebug] = useState(false);
@@ -127,25 +129,11 @@ const CPUDatapath: React.FC = () => {
       y: 500 * scale,
       width: 55 * scale,
       height: 70 * scale
-    },
-    ShiftLeft2: {
+    },    ShiftLeft2: {
       x: 525 * scale,
       y: (60 + 80 - 25/2 + 13*90/16 - 50/2 - 50) * scale, // SHIFT_LEFT2_COORDS calculation
       width: 45 * scale,
       height: 50 * scale
-    },
-    // Flags component
-    Flags: {
-      x: 535 * scale,
-      y: 310 * scale,
-      width: 88 * scale,
-      height: 20 * scale
-    },
-    FlagAND: {
-      x: 645 * scale,
-      y: (310 + 20/2 - 4*20/5) * scale,
-      width: 20 * scale,
-      height: 20 * scale
     },
     ZeroAND: {
       x: 715 * scale,
@@ -177,13 +165,13 @@ const CPUDatapath: React.FC = () => {
       y: (340 + 13*110/16 - 65/2) * scale, // MUX_READ_REG_COORDS calculation
       width: 25 * scale,
       height: 65 * scale
-    },
-    MuxReadMem: {
+    },    MuxReadMem: {
       x: 835 * scale,
       y: 420 * scale,
       width: 25 * scale,
-      height: 65 * scale    }
-  };  // Initialize component registry for animation system
+      height: 65 * scale
+    }
+  };// Initialize component registry for animation system
   useEffect(() => {
     componentRegistry.initialize(components, verticalLines, scale);
     // Set wire path calculator for the animation controller
@@ -229,8 +217,7 @@ const CPUDatapath: React.FC = () => {
         setHighlightedComponents([]);
         // Execute the actual instruction step after animation
         step();
-      },
-      onComponentHighlight: (componentIds: string[]) => {
+      },      onComponentHighlight: (componentIds: string[]) => {
         setActiveComponents(new Set(componentIds));
         // Also update store highlights
         const highlights = componentIds.map(componentId => ({
@@ -239,6 +226,27 @@ const CPUDatapath: React.FC = () => {
           duration: 1000
         }));
         setHighlightedComponents(highlights);
+      },      onOperationHighlight: (highlights: ComponentHighlight[]) => {
+        console.log('Highlighting components for operation:', highlights);
+        setHighlightedComponents(highlights);
+        
+        // Extract wire paths from highlights
+        const wirePaths: string[] = [];
+        highlights.forEach(highlight => {
+          if (highlight.wirePaths) {
+            wirePaths.push(...highlight.wirePaths);
+          }
+        });
+        
+        if (wirePaths.length > 0) {
+          console.log('Highlighting wire paths:', wirePaths);
+          setHighlightedWirePaths(wirePaths);
+        }
+      },
+      onClearHighlights: () => {
+        console.log('Clearing all highlights');
+        setHighlightedComponents([]);
+        setHighlightedWirePaths([]);
       },
       // Multi-circle animation callbacks
       onCircleCreate: (circle: DataCircle) => {
@@ -368,10 +376,9 @@ const CPUDatapath: React.FC = () => {
   const instructionTextCoords = {
     x: 20 * scale,
     y: (515 + 70) * scale
-  };
-  // Control signal constants from Java
+  };  // Control signal constants from Java
   const CONTROL_OFFSET = 2.5 * scale;
-  const CONTROL_PADDING = ((160 - 2 * 2.5) / 10) * scale;  // (CONTROL_HEIGHT - 2*CONTROL_OFFSET)/10 from Java
+  const CONTROL_PADDING = ((160 - 2 * 2.5) / 9) * scale;  // (CONTROL_HEIGHT - 2*CONTROL_OFFSET)/9 for 9 signals
 
   // Helper function to calculate ellipse intersection point
   const getEllipseXIntersect = (xOffset: number, y: number, xRadius: number, yRadius: number): number => {
@@ -438,40 +445,12 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
-      />
-
-      {/* Flag Branch Signal */}
+      />      {/* Zero Branch Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
           components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 2*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
         y={components.Control.y + CONTROL_OFFSET + 2*CONTROL_PADDING}
-        xEnd={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <VerticalSegment 
-        x={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
-        yStart={components.FlagAND.y + components.FlagAND.height/5}
-        yEnd={components.Control.y + CONTROL_OFFSET + 2*CONTROL_PADDING}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <HorizontalSegment 
-        xStart={components.Flags.x + components.Flags.width + (components.FlagAND.x - components.Flags.x - components.Flags.width)/2}
-        y={components.FlagAND.y + components.FlagAND.height/5}
-        xEnd={components.FlagAND.x}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-        // hasArrow={true}
-      />
-
-      {/* Zero Branch Signal */}
-      <HorizontalSegment 
-        xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 3*CONTROL_PADDING,
-          components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
         xEnd={verticalLines.ZERO_AND_VERT_X}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -479,7 +458,7 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={verticalLines.ZERO_AND_VERT_X}
         yStart={components.ZeroAND.y + components.ZeroAND.height/5}
-        yEnd={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 2*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
       />
@@ -490,14 +469,12 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
-      />
-
-      {/* MemRead Signal */}
+      />      {/* MemRead Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 4*CONTROL_PADDING,
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 3*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        y={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
         xEnd={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -505,7 +482,7 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={components.MuxReadMem.x + components.MuxReadMem.width + components.PC.width}
         yStart={components.DataMem.y + components.DataMem.height + components.PC.width}
-        yEnd={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 3*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
       />
@@ -523,33 +500,28 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
-      />
-
-      {/* MemToReg Signal */}
+      />      {/* MemToReg Signal */}
+      <HorizontalSegment 
+        xStart={getEllipseXIntersect(components.Control.x, 
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 4*CONTROL_PADDING,
+          components.Control.width/2, components.Control.height/2)}
+        y={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        xEnd={components.MuxReadMem.x + components.MuxReadMem.width/2}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+      />      <VerticalSegment 
+        x={components.MuxReadMem.x + components.MuxReadMem.width/2}
+        yStart={components.MuxReadMem.y}
+        yEnd={components.Control.y + CONTROL_OFFSET + 4*CONTROL_PADDING}
+        color={COLORS.CONTROL_BLUE}
+        isDashed={true}
+        // hasArrow={true}
+      />      {/* MemWrite Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
           components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 5*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
         y={components.Control.y + CONTROL_OFFSET + 5*CONTROL_PADDING}
-        xEnd={components.MuxReadMem.x + components.MuxReadMem.width/2}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <VerticalSegment 
-        x={components.MuxReadMem.x + components.MuxReadMem.width/2}
-        yStart={components.MuxReadMem.y}
-        yEnd={components.Control.y + CONTROL_OFFSET + 5*CONTROL_PADDING}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-        // hasArrow={true}
-      />
-
-      {/* MemWrite Signal */}
-      <HorizontalSegment 
-        xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 6*CONTROL_PADDING,
-          components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
         xEnd={components.DataMem.x + components.DataMem.width/2}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -557,37 +529,16 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={components.DataMem.x + components.DataMem.width/2}
         yStart={components.DataMem.y}
-        yEnd={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 5*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
-      />
-
-      {/* FlagWrite Signal */}
+      />      {/* ALUSrc Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 7*CONTROL_PADDING,
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 6*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
-        xEnd={components.Flags.x + components.Flags.width/2}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <VerticalSegment 
-        x={components.Flags.x + components.Flags.width/2}
-        yStart={components.Flags.y}
-        yEnd={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-        // hasArrow={true}
-      />
-
-      {/* ALUSrc Signal */}
-      <HorizontalSegment 
-        xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 8*CONTROL_PADDING,
-          components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
+        y={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
         xEnd={components.MuxReadReg.x + components.MuxReadReg.width/2}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -595,18 +546,16 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={components.MuxReadReg.x + components.MuxReadReg.width/2}
         yStart={components.MuxReadReg.y}
-        yEnd={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 6*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
-      />
-
-      {/* ALUOp Signal */}
+      />      {/* ALUOp Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 9*CONTROL_PADDING,
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 7*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 9*CONTROL_PADDING}
+        y={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
         xEnd={components.RegFile.x + components.RegFile.width + 2*(components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -615,7 +564,7 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={components.RegFile.x + components.RegFile.width + 2*(components.MuxReadReg.x - components.RegFile.x - components.RegFile.width)/5}
         yStart={components.ALUControl.y + 1.375*components.ALUControl.height}
-        yEnd={components.Control.y + CONTROL_OFFSET + 9*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 7*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         strokeWidth={3.5}
@@ -636,14 +585,12 @@ const CPUDatapath: React.FC = () => {
         isDashed={true}
         strokeWidth={3.5}
         // hasArrow={true}
-      />
-
-      {/* RegWrite Signal */}
+      />      {/* RegWrite Signal */}
       <HorizontalSegment 
         xStart={getEllipseXIntersect(components.Control.x, 
-          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 10*CONTROL_PADDING,
+          components.Control.y + components.Control.height/2 - components.Control.y - CONTROL_OFFSET - 8*CONTROL_PADDING,
           components.Control.width/2, components.Control.height/2)}
-        y={components.Control.y + CONTROL_OFFSET + 10*CONTROL_PADDING}
+        y={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
         xEnd={components.RegFile.x + components.RegFile.width/2}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
@@ -651,7 +598,7 @@ const CPUDatapath: React.FC = () => {
       <VerticalSegment 
         x={components.RegFile.x + components.RegFile.width/2}
         yStart={components.RegFile.y}
-        yEnd={components.Control.y + CONTROL_OFFSET + 10*CONTROL_PADDING}
+        yEnd={components.Control.y + CONTROL_OFFSET + 8*CONTROL_PADDING}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
@@ -669,40 +616,6 @@ const CPUDatapath: React.FC = () => {
         x={components.MuxPC.x + components.MuxPC.width/2}
         yStart={components.BranchOR.y + components.BranchOR.height/2}
         yEnd={components.MuxPC.y + components.MuxPC.height}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-        // hasArrow={true}
-      />
-
-      {/* Flag -> FlagAnd Signal */}
-      <HorizontalSegment 
-        xStart={components.Flags.x + components.Flags.width}
-        y={components.Flags.y + components.Flags.height/2}
-        xEnd={components.FlagAND.x}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-        // hasArrow={true}
-      />
-
-      {/* FlagAnd -> BranchOR Signal */}
-      <HorizontalSegment 
-        xStart={components.FlagAND.x + components.FlagAND.width}
-        y={components.FlagAND.y + components.FlagAND.height/2}
-        xEnd={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <VerticalSegment 
-        x={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
-        yStart={components.FlagAND.y + components.FlagAND.height/2}
-        yEnd={components.BranchOR.y + components.BranchOR.height/2}
-        color={COLORS.CONTROL_BLUE}
-        isDashed={true}
-      />
-      <HorizontalSegment 
-        xStart={components.FlagAND.x + components.FlagAND.width + (verticalLines.ZERO_AND_VERT_X - components.FlagAND.x - components.FlagAND.width)/2}
-        y={components.BranchOR.y + components.BranchOR.height/2}
-        xEnd={components.BranchOR.x + 5}
         color={COLORS.CONTROL_BLUE}
         isDashed={true}
         // hasArrow={true}
@@ -776,14 +689,19 @@ const CPUDatapath: React.FC = () => {
       />
 
     </g>
-  );
-
-  // Wire drawing functions based on Java code
+  );  // Wire drawing functions based on Java code
+  // Implements 5-stage instruction cycle: IF -> ID -> EX -> MEM -> WB
+  // Stage 1 (IF): Instruction Fetch - Get next instruction from memory
+  // Stage 2 (ID): Instruction Decode - Decode instruction and fetch operands
+  // Stages 3-5 (EX/MEM/WB): Execute, Memory Access, Write-Back (instruction-dependent)
   const WireComponents = () => (
     <g>
       {/* Data Wires (black) */}
       
-      {/* 4 -> ALUPC */}
+      {/* ===== STAGE 1: INSTRUCTION FETCH (IF) ===== */}
+      {/* Components Used: PC, Instruction Memory, ALUPC - Action: Retrieve instruction and calculate PC+4 */}
+      
+      {/* 4 -> ALUPC (Constant 4 for PC+4 calculation) */}
       <RightArrow 
         xTail={verticalLines.PC_PCALU_X + 2*(components.ALUPC.x - verticalLines.PC_PCALU_X)/3}
         y={components.ALUPC.y + 13*components.ALUPC.height/16}
@@ -791,7 +709,7 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.BLACK}
       />
 
-      {/* PC -> InsMem */}
+      {/* PC -> InsMem (Current instruction address to fetch instruction) */}
       <RightArrow 
         xTail={components.PC.x + components.PC.width}
         y={components.PC.y + components.PC.height/2}
@@ -799,7 +717,7 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.BLACK}
       />
 
-      {/* PC -> ALUPC */}
+      {/* PC -> ALUPC (PC value for PC+4 calculation) */}
       <RightArrow 
         xTail={verticalLines.PC_PCALU_X}
         y={components.ALUPC.y + 3*components.ALUPC.height/16}
@@ -851,12 +769,13 @@ const CPUDatapath: React.FC = () => {
       />
       <RightArrow 
         xTail={(components.InsMem.x + components.InsMem.width + components.RegFile.x)/2}
-        y={components.ALUBranch.y + 3*components.ALUBranch.height/16}
-        xHead={components.ALUBranch.x}
+        y={components.ALUBranch.y + 3*components.ALUBranch.height/16}        xHead={components.ALUBranch.x}
         color={COLORS.BLACK}
       />
 
-      {/* InsMem -> Control */}
+      {/* ===== STAGE 2: INSTRUCTION DECODE (ID) ===== */}
+
+      {/* InsMem -> Control (Opcode [31-21] to generate control signals) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -873,11 +792,10 @@ const CPUDatapath: React.FC = () => {
       <RightArrow 
         xTail={verticalLines.INS_MEM_X}
         y={components.Control.y + components.Control.height/2}
-        xHead={components.Control.x}
-        color={COLORS.BLACK}
+        xHead={components.Control.x}        color={COLORS.BLACK}
       />
 
-      {/* InsMem -> RegFileRead1 */}
+      {/* InsMem -> RegFileRead1 (Rn register [9-5] to first read port) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -895,11 +813,10 @@ const CPUDatapath: React.FC = () => {
       <RightArrow 
         xTail={verticalLines.INS_MEM_X}
         y={components.RegFile.y + components.RegFile.height/10}
-        xHead={components.RegFile.x}
-        color={COLORS.BLACK}
+        xHead={components.RegFile.x}        color={COLORS.BLACK}
       />
 
-      {/* InsMem -> RegFileWrite */}
+      {/* InsMem -> RegFileWrite (Rd register [4-0] to write port) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -918,11 +835,10 @@ const CPUDatapath: React.FC = () => {
       <RightArrow 
         xTail={verticalLines.INS_MEM_X}
         y={components.RegFile.y + 7*components.RegFile.height/10}
-        xHead={components.RegFile.x}
-        color={COLORS.BLACK}
+        xHead={components.RegFile.x}        color={COLORS.BLACK}
       />
 
-      {/* InsMem -> MuxReg2Loc1 */}
+      {/* InsMem -> MuxReg2Loc1 (Rm register [20-16] as potential second operand) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -975,11 +891,10 @@ const CPUDatapath: React.FC = () => {
       <RightArrow 
         xTail={verticalLines.INS_MEM_X}
         y={components.MuxReg2Loc.y + components.MuxReg2Loc.width/2}
-        xHead={components.MuxReg2Loc.x}
-        color={COLORS.BLACK}
+        xHead={components.MuxReg2Loc.x}        color={COLORS.BLACK}
       />
 
-      {/* InsMem -> SignExtend */}
+      {/* InsMem -> SignExtend (Immediate value for sign extension) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -1001,11 +916,10 @@ const CPUDatapath: React.FC = () => {
       />
       <DiagonalSlash 
         x={components.RegFile.x + (components.SignExtend.x - components.RegFile.x)/2 - 4}
-        y={components.SignExtend.y + components.SignExtend.height/2}
-        color={COLORS.BLACK}
+        y={components.SignExtend.y + components.SignExtend.height/2}        color={COLORS.BLACK}
       />
 
-      {/* InsMem -> ALUControl */}
+      {/* InsMem -> ALUControl (Function code bits for ALU operation) */}
       <HorizontalSegment 
         xStart={components.InsMem.x + components.InsMem.width}
         y={components.InsMem.y + components.InsMem.height/2}
@@ -1096,7 +1010,43 @@ const CPUDatapath: React.FC = () => {
         color={COLORS.BLACK}
       />
 
-      {/* ALUPC -> MuxPC */}
+      {/* ALUMain -> MuxReadMemData (ALU result to read data multiplexer) */}
+      <HorizontalSegment 
+        xStart={components.ALUMain.x + components.ALUMain.width}
+        y={components.ALUMain.y + 5*components.ALUMain.height/8}
+        xEnd={verticalLines.ZERO_AND_VERT_X}
+        color={COLORS.BLACK}
+        joinEnd={true}
+      />
+      <VerticalSegment 
+        x={verticalLines.ZERO_AND_VERT_X}
+        yStart={components.ALUMain.y + 5*components.ALUMain.height/8}
+        yEnd={components.DataMem.y + components.DataMem.height + 15}
+        color={COLORS.BLACK}
+        joinStart={true}
+        joinEnd={true}
+      />
+      <HorizontalSegment 
+        xStart={verticalLines.ZERO_AND_VERT_X}
+        y={components.DataMem.y + components.DataMem.height + 15}
+        xEnd={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        color={COLORS.BLACK}
+        joinStart={true}
+      />
+      <VerticalSegment 
+        x={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        yStart={components.DataMem.y + components.DataMem.height + 15}
+        yEnd={components.MuxReadMem.y + components.MuxReadMem.height - components.MuxReadMem.width/2}
+        color={COLORS.BLACK}
+      />
+      <RightArrow 
+        xTail={components.DataMem.x + components.DataMem.width + (components.MuxReadMem.x - components.DataMem.x - components.DataMem.width)/2}
+        y={components.MuxReadMem.y + components.MuxReadMem.height - components.MuxReadMem.width/2}
+        xHead={components.MuxReadMem.x}
+        color={COLORS.BLACK}
+      />
+
+      {/* ALUPC -> MuxPC (PC+4 result to PC multiplexer) */}
       <HorizontalSegment 
         xStart={components.ALUPC.x + components.ALUPC.width}
         y={components.ALUPC.y + components.ALUPC.height/2}
@@ -1122,17 +1072,7 @@ const CPUDatapath: React.FC = () => {
         y={components.ALUBranch.y + components.ALUBranch.height/2}
         xHead={components.MuxPC.x}
         color={COLORS.BLACK}
-      />
-
-      {/* ALUMain -> Flags */}
-      <UpArrow 
-        x={components.ALUMain.x + components.ALUMain.width/2}
-        yTail={components.ALUMain.y + components.ALUMain.height/8}
-        yHead={components.Flags.y + components.Flags.height}
-        color={COLORS.BLACK}
-      />
-
-      {/* ALUMain -> DataMem */}
+      />      {/* ALUMain -> DataMem */}
       <RightArrow 
         xTail={components.ALUMain.x + components.ALUMain.width}
         y={components.ALUMain.y + 5*components.ALUMain.height/8}
@@ -1347,8 +1287,8 @@ const CPUDatapath: React.FC = () => {
         strokeWidth={2}
       />
       <text 
-        x={components.RegFile.x + components.RegFile.width/2}
-        y={components.RegFile.y + components.RegFile.height/2 - 10}
+        x={components.RegFile.x + components.RegFile.width/2+20}
+        y={components.RegFile.y + components.RegFile.height/2 + 50}
         textAnchor="middle"
         dominantBaseline="middle"
         fontSize="10"
@@ -1359,7 +1299,7 @@ const CPUDatapath: React.FC = () => {
       </text>
       <text 
         x={components.RegFile.x + components.RegFile.width/2}
-        y={components.RegFile.y + components.RegFile.height/2 + 10}
+        y={components.RegFile.y + components.RegFile.height/2 + 60}
         textAnchor="middle"
         dominantBaseline="middle"
         fontSize="10"
@@ -1383,8 +1323,8 @@ const CPUDatapath: React.FC = () => {
         strokeWidth={2}
       />
       <text 
-        x={components.DataMem.x + components.DataMem.width/2}
-        y={components.DataMem.y + components.DataMem.height/2 - 10}
+        x={components.DataMem.x + components.DataMem.width/2 + 15}
+        y={components.DataMem.y + components.DataMem.height/2 + 45}
         textAnchor="middle"
         dominantBaseline="middle"
         fontSize="10"
@@ -1394,8 +1334,8 @@ const CPUDatapath: React.FC = () => {
         Data
       </text>
       <text 
-        x={components.DataMem.x + components.DataMem.width/2}
-        y={components.DataMem.y + components.DataMem.height/2 + 10}
+        x={components.DataMem.x + components.DataMem.width/2 + 15}
+        y={components.DataMem.y + components.DataMem.height/2 + 55}
         textAnchor="middle"
         dominantBaseline="middle"
         fontSize="10"
@@ -1596,20 +1536,6 @@ const CPUDatapath: React.FC = () => {
       </text>
     </g>
   );
-
-  const drawFlagAnd = () => (
-    <g>
-      <ANDGateHorizontal 
-        x={components.FlagAND.x}
-        y={components.FlagAND.y}
-        width={components.FlagAND.width}
-        height={components.FlagAND.height}
-        stroke={COLORS.CONTROL_BLUE}
-        fill={COLORS.WHITE}
-      />
-    </g>
-  );
-
   const drawZeroAnd = () => (
     <g>
       <ANDGateHorizontal 
@@ -1636,59 +1562,6 @@ const CPUDatapath: React.FC = () => {
     </g>
   );
 
-  const drawFlags = (highlightWrite: boolean, highlightRead: boolean) => (
-    <g>
-      {/* Flags register split into 4 parts as in Java implementation */}
-      <Rectangle 
-        x={components.Flags.x}
-        y={components.Flags.y}
-        width={components.Flags.width/4}
-        height={components.Flags.height}
-        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
-        stroke={COLORS.BLACK}
-        strokeWidth={1}
-      />
-      <Rectangle 
-        x={components.Flags.x + components.Flags.width/4}
-        y={components.Flags.y}
-        width={components.Flags.width/4}
-        height={components.Flags.height}
-        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
-        stroke={COLORS.BLACK}
-        strokeWidth={1}
-      />
-      <Rectangle 
-        x={components.Flags.x + 2*components.Flags.width/4}
-        y={components.Flags.y}
-        width={components.Flags.width/4}
-        height={components.Flags.height}
-        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
-        stroke={COLORS.BLACK}
-        strokeWidth={1}
-      />
-      <Rectangle 
-        x={components.Flags.x + 3*components.Flags.width/4}
-        y={components.Flags.y}
-        width={components.Flags.width/4}
-        height={components.Flags.height}
-        fill={(highlightWrite || highlightRead) ? COLORS.ARM_BLUE : COLORS.WHITE}
-        stroke={COLORS.BLACK}
-        strokeWidth={1}
-      />
-      {/* <text 
-        x={components.Flags.x + components.Flags.width/2}
-        y={components.Flags.y + components.Flags.height/2}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="8"
-        fontWeight="bold"
-        fill={(highlightWrite || highlightRead) ? COLORS.WHITE : COLORS.BLACK}
-      >
-        Flags
-      </text> */}
-    </g>
-  );
-
   // Main component drawing function that matches Java drawComponentsInit()
   const ComponentElements = () => (
     <g>
@@ -1705,8 +1578,6 @@ const CPUDatapath: React.FC = () => {
       {drawMuxReadMemData(false, false)}
       {drawSignExtend(false)}
       {drawShiftLeft2(false)}
-      {drawFlags(false, false)}
-      {drawFlagAnd()}
       {drawZeroAnd()}
       {drawBranchOr()}
       {drawControl()}
@@ -1846,54 +1717,7 @@ const CPUDatapath: React.FC = () => {
       
       {/* More MUX labels */}
       {drawMux_TXT(components.MuxReadReg, "0", "1")}
-      
-      {/* ALU Main Text - already handled in drawALUMain */}
-      
-      {/* Flag Text */}
-      <text 
-        x={components.Flags.x + components.Flags.width/8}
-        y={components.Flags.y + components.Flags.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={14 * scale}
-        fontWeight="bold"
-        fill={COLORS.BLACK}
-      >
-        N
-      </text>
-      <text 
-        x={components.Flags.x + 3*components.Flags.width/8}
-        y={components.Flags.y + components.Flags.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={14 * scale}
-        fontWeight="bold"
-        fill={COLORS.BLACK}
-      >
-        Z
-      </text>
-      <text 
-        x={components.Flags.x + 5*components.Flags.width/8}
-        y={components.Flags.y + components.Flags.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={14 * scale}
-        fontWeight="bold"
-        fill={COLORS.BLACK}
-      >
-        C
-      </text>
-      <text 
-        x={components.Flags.x + 7*components.Flags.width/8}
-        y={components.Flags.y + components.Flags.height/2 + 5}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={14 * scale}
-        fontWeight="bold"
-        fill={COLORS.BLACK}
-      >
-        V
-      </text>
+        {/* ALU Main Text - already handled in drawALUMain */}
       
       {/* ALU Branch Text */}
       <text 
@@ -2169,53 +1993,6 @@ const CPUDatapath: React.FC = () => {
         data
       </text>
       
-      {/* Read Data labels */}
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.ALUMain.y + 3*components.ALUMain.height/16}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        Read
-      </text>
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.ALUMain.y + 3*components.ALUMain.height/16 + 10}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        data 1
-      </text>
-      
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.MuxReadReg.y + components.MuxReadReg.width/2}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        Read
-      </text>
-      <text 
-        x={components.RegFile.x + components.RegFile.width - 4}
-        y={components.MuxReadReg.y + components.MuxReadReg.width/2 + 10}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.BLACK}
-      >
-        data 2
-      </text>
-      
       {/* Data Memory labels */}
       <text 
         x={components.DataMem.x + 3}
@@ -2366,8 +2143,7 @@ const CPUDatapath: React.FC = () => {
       >
         Reg2Loc
       </text>
-      
-      <text 
+        <text 
         x={components.Control.x + components.Control.width + 5}
         y={components.Control.y + CONTROL_OFFSET - 2.5 + CONTROL_PADDING}
         textAnchor="start"
@@ -2388,7 +2164,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        FlagBranch
+        Branch
       </text>
       
       <text 
@@ -2400,7 +2176,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        ZeroBranch
+        MemRead
       </text>
       
       <text 
@@ -2412,7 +2188,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        MemRead
+        MemToReg
       </text>
       
       <text 
@@ -2424,7 +2200,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        MemToReg
+        MemWrite
       </text>
       
       <text 
@@ -2436,7 +2212,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        MemWrite
+        ALUSrc
       </text>
       
       <text 
@@ -2448,7 +2224,7 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        FlagWrite
+        ALUOp
       </text>
       
       <text 
@@ -2460,47 +2236,18 @@ const CPUDatapath: React.FC = () => {
         fontWeight="normal"
         fill={COLORS.CONTROL_BLUE}
       >
-        ALUSrc
-      </text>
-      
-      <text 
-        x={components.Control.x + components.Control.width + 5}
-        y={components.Control.y + CONTROL_OFFSET - 2.5 + 9*CONTROL_PADDING}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        ALUOp
-      </text>
-      
-      <text 
-        x={components.Control.x + components.Control.width + 5}
-        y={components.Control.y + CONTROL_OFFSET - 2.5 + 10*CONTROL_PADDING}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={12 * scale}
-        fontWeight="normal"
-        fill={COLORS.CONTROL_BLUE}
-      >
         RegWrite
       </text>
     </g>
-  );
-  // Control signal value display function
+  );  // Control signal value display function
   const ControlSignalValues = ({ 
     controlConfig,
-    flags_flagAnd = "0",
-    flagAnd_branchOr = "0",
     ALUMain_ZeroAnd = "0",
     zeroAnd_branchOr = "0",
     branchOr_PCMux = "0",
     ALUMain = "ADD"
   }: {
     controlConfig: typeof cpu.controlSignals;
-    flags_flagAnd?: string;
-    flagAnd_branchOr?: string;
     ALUMain_ZeroAnd?: string;
     zeroAnd_branchOr?: string;
     branchOr_PCMux?: string;
@@ -2530,18 +2277,6 @@ const CPUDatapath: React.FC = () => {
         fill={COLORS.CONTROL_BLUE}
       >
         {controlConfig?.uncondBranch?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.FlagAND.x - 2}
-        y={components.FlagAND.y + 2.5}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.flagBranch?.toString() || "0"}
       </text>
       
       <text 
@@ -2593,18 +2328,6 @@ const CPUDatapath: React.FC = () => {
       </text>
       
       <text 
-        x={components.Flags.x + components.Flags.width/2 - 1}
-        y={components.Flags.y - 3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.flagWrite?.toString() || "0"}
-      </text>
-      
-      <text 
         x={components.MuxReadReg.x + components.MuxReadReg.width/2 - 1}
         y={components.MuxReadReg.y - 3}
         textAnchor="middle"
@@ -2629,30 +2352,6 @@ const CPUDatapath: React.FC = () => {
       </text>
       
       {/* Gate signal values */}
-      <text 
-        x={components.FlagAND.x - 2}
-        y={components.FlagAND.y + components.FlagAND.height/2 + 5}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {flags_flagAnd}
-      </text>
-      
-      <text 
-        x={components.FlagAND.x + components.FlagAND.width + 7}
-        y={components.FlagAND.y + components.FlagAND.height/2 - 1}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {flagAnd_branchOr}
-      </text>
-      
       <text 
         x={components.ZeroAND.x - 2}
         y={components.ZeroAND.y + components.ZeroAND.height/2 + 5}
@@ -2761,15 +2460,16 @@ const CPUDatapath: React.FC = () => {
 
         {/* Draw control signal values */}        <ControlSignalValues 
           controlConfig={cpu.controlSignals}
-          flags_flagAnd="0"
-          flagAnd_branchOr="0"
           ALUMain_ZeroAnd="0"
           zeroAnd_branchOr="0"
           branchOr_PCMux="0"
           ALUMain={cpu.controlSignals.aluOp || "ADD"}
         />        {/* Animation Components Layer */}
         {(showStageAnimation || isAnimating || activeCircles.size > 0) && (
-          <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Component Highlighter */}
+          <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Wire Path Highlighter */}
+            <WirePathHighlighter highlightedPaths={highlightedWirePaths} />
+
+            {/* Component Highlighter */}
             <ComponentHighlighter
               highlights={highlightedComponents}
               componentCoordinates={components}

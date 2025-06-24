@@ -47,9 +47,7 @@ export class WirePathCalculator {
   // NEW: Multi-path support
   private activePaths: Map<string, MultiPathInfo> = new Map();
   private sharedSegments: Map<string, PathSegmentInfo> = new Map();
-  private pathUsageCount: Map<string, number> = new Map();
-
-  /**
+  private pathUsageCount: Map<string, number> = new Map();  /**
    * Initialize the wire path calculator with component coordinates
    */
   initialize(components: any, verticalLines: any, scale: number): void {
@@ -240,11 +238,10 @@ export class WirePathCalculator {
       this.sharedSegments.set(segmentKey, segmentInfo);
     });
   }
-
   /**
    * NEW: Get component center point
    */
-  private getComponentCenter(componentId: string): Point {
+  getComponentCenter(componentId: string): Point {
     const component = this.components[componentId];
     if (!component) {
       console.error(`Component ${componentId} not found`);
@@ -370,6 +367,13 @@ export class WirePathCalculator {
     this.activePaths.clear();
     this.sharedSegments.clear();
     this.pathUsageCount.clear();
+  }
+
+  /**
+   * Get wire path between two components (alias for getPath)
+   */
+  getWirePath(fromComponent: string, toComponent: string): Point[] {
+    return this.getPath(fromComponent, toComponent);
   }
 
   /**
