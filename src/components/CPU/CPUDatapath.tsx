@@ -6,7 +6,8 @@ import { instructionAnimationController } from '../../utils/instructionAnimation
 import { getStageSequenceForInstruction, adjustStageDurations } from '../../utils/stageAnimations';
 import { DataCircle } from '../../types/animationTypes';
 import AnimationCircle from './AnimationCircle';
-import ComponentHighlighter from './ComponentHighlighter';
+import ComponentHighlighter, { ComponentHighlight } from './ComponentHighlighter';
+import WirePathHighlighter from './WirePathHighlighter';
 import CircleManager from './CircleManager';
 import { WirePathVisualizer, WirePathDebugPanel } from './WirePathVisualizer';
 import Rectangle from './BaseShape/Rectangle';
@@ -40,9 +41,10 @@ const CPUDatapath: React.FC = () => {
   const [currentAnimationStages, setCurrentAnimationStages] = useState<any[]>([]);
   const [currentStageDuration, setCurrentStageDuration] = useState(1000);
   const [showStageAnimation, setShowStageAnimation] = useState(false);
-    // Multi-circle animation state
+  // Multi-circle animation state
   const [activeCircles, setActiveCircles] = useState<Map<string, DataCircle>>(new Map());
   const [lastInstruction, setLastInstruction] = useState<string | null>(null);
+  const [highlightedWirePaths, setHighlightedWirePaths] = useState<string[]>([]);
   
   // Debug state for wire path visualization
   const [showWireDebug, setShowWireDebug] = useState(false);
@@ -215,8 +217,7 @@ const CPUDatapath: React.FC = () => {
         setHighlightedComponents([]);
         // Execute the actual instruction step after animation
         step();
-      },
-      onComponentHighlight: (componentIds: string[]) => {
+      },      onComponentHighlight: (componentIds: string[]) => {
         setActiveComponents(new Set(componentIds));
         // Also update store highlights
         const highlights = componentIds.map(componentId => ({
@@ -225,6 +226,27 @@ const CPUDatapath: React.FC = () => {
           duration: 1000
         }));
         setHighlightedComponents(highlights);
+      },      onOperationHighlight: (highlights: ComponentHighlight[]) => {
+        console.log('Highlighting components for operation:', highlights);
+        setHighlightedComponents(highlights);
+        
+        // Extract wire paths from highlights
+        const wirePaths: string[] = [];
+        highlights.forEach(highlight => {
+          if (highlight.wirePaths) {
+            wirePaths.push(...highlight.wirePaths);
+          }
+        });
+        
+        if (wirePaths.length > 0) {
+          console.log('Highlighting wire paths:', wirePaths);
+          setHighlightedWirePaths(wirePaths);
+        }
+      },
+      onClearHighlights: () => {
+        console.log('Clearing all highlights');
+        setHighlightedComponents([]);
+        setHighlightedWirePaths([]);
       },
       // Multi-circle animation callbacks
       onCircleCreate: (circle: DataCircle) => {
@@ -2442,9 +2464,12 @@ const CPUDatapath: React.FC = () => {
           zeroAnd_branchOr="0"
           branchOr_PCMux="0"
           ALUMain={cpu.controlSignals.aluOp || "ADD"}
-        />{/* Animation Components Layer */}
+        />        {/* Animation Components Layer */}
         {(showStageAnimation || isAnimating || activeCircles.size > 0) && (
-          <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Component Highlighter */}
+          <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Wire Path Highlighter */}
+            <WirePathHighlighter highlightedPaths={highlightedWirePaths} />
+
+            {/* Component Highlighter */}
             <ComponentHighlighter
               highlights={highlightedComponents}
               componentCoordinates={components}

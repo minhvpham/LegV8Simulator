@@ -5,6 +5,8 @@ interface WireSegmentProps {
   strokeWidth?: number;
   isDashed?: boolean;
   hasArrow?: boolean;
+  'data-wire-path'?: string;
+  'data-wire'?: string;
 }
 
 interface VerticalSegmentProps extends WireSegmentProps {
@@ -36,13 +38,15 @@ const VerticalSegment: React.FC<VerticalSegmentProps> = ({
   strokeWidth = 2,
   isDashed = false,
   hasArrow = false,
+  'data-wire-path': wirePathId,
+  'data-wire': wireId
 }) => {
   const yTop = Math.min(yStart, yEnd);
   const yBottom = Math.max(yStart, yEnd);
   const arrowDirection = yEnd > yStart ? 'down' : 'up';
   
   return (
-    <g>
+    <g data-wire-path={wirePathId} data-wire={wireId}>
       {/* Join circle at start */}
       {joinStart && (
         <circle
@@ -50,15 +54,18 @@ const VerticalSegment: React.FC<VerticalSegmentProps> = ({
           cy={yStart}
           r={3}
           fill={color}
+          data-wire-path={wirePathId}
+          data-wire={wireId}
         />
-      )}
-      {/* Join circle at end */}
+      )}      {/* Join circle at end */}
       {joinEnd && (
         <circle
           cx={x}
           cy={yEnd}
           r={3}
           fill={color}
+          data-wire-path={wirePathId}
+          data-wire={wireId}
         />
       )}
       {/* Wire line */}
@@ -71,6 +78,8 @@ const VerticalSegment: React.FC<VerticalSegmentProps> = ({
         strokeWidth={strokeWidth}
         strokeDasharray={isDashed ? "4,4" : "none"}
         markerEnd={hasArrow ? `url(#arrowhead${isDashed ? '-control' : ''})` : "none"}
+        data-wire-path={wirePathId}
+        data-wire={wireId}
       />
     </g>
   );
@@ -89,9 +98,11 @@ const HorizontalSegment: React.FC<HorizontalSegmentProps> = ({
   strokeWidth = 2,
   isDashed = false,
   hasArrow = false,
+  'data-wire-path': wirePathId,
+  'data-wire': wireId
 }) => {
   return (
-    <g>
+    <g data-wire-path={wirePathId} data-wire={wireId}>
       {/* Join circle at start */}
       {joinStart && (
         <circle
@@ -99,6 +110,8 @@ const HorizontalSegment: React.FC<HorizontalSegmentProps> = ({
           cy={y}
           r={3}
           fill={color}
+          data-wire-path={wirePathId}
+          data-wire={wireId}
         />
       )}
       {/* Join circle at end */}
@@ -108,9 +121,10 @@ const HorizontalSegment: React.FC<HorizontalSegmentProps> = ({
           cy={y}
           r={3}
           fill={color}
+          data-wire-path={wirePathId}
+          data-wire={wireId}
         />
-      )}
-      {/* Wire line */}
+      )}      {/* Wire line */}
       <line
         x1={xStart}
         y1={y}
@@ -120,6 +134,8 @@ const HorizontalSegment: React.FC<HorizontalSegmentProps> = ({
         strokeWidth={strokeWidth}
         strokeDasharray={isDashed ? "4,4" : "none"}
         markerEnd={hasArrow ? `url(#arrowhead${isDashed ? '-control' : ''})` : "none"}
+        data-wire-path={wirePathId}
+        data-wire={wireId}
       />
     </g>
   );

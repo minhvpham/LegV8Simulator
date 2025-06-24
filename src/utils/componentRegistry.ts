@@ -232,9 +232,7 @@ export const getAvailableConnections = (): string[] => {
     
     // Flag and Branch Logic
     'ALUMain->Flags',
-    'Flags->FlagAND',
     'ALUMain->ZeroAND',
-    'FlagAND->BranchOR',
     'ZeroAND->BranchOR',
     'BranchOR->MuxPC',
     

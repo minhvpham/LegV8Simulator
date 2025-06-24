@@ -36,7 +36,7 @@ export function resolveWirePathCoordinates(wirePathObject: any, components: any,
  */
 export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   stageName: "Instruction Decode (ID)",
-  initialCircles: ['D_Instruction', 'D_PC_Plus_4'], // From IF stage
+  initialCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // From IF stage
   operations: [    // 7-way split of instruction word to different components
     {
       type: 'split',
@@ -108,44 +108,6 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   duration: 500,
   simultaneousFlows: true
 };
-
-/**
- * Animation Flow Description:
- * 
- * 1. Initial State: D_Instruction rectangle at InsMem component with 32-bit instruction
- * * 2. 7-Way Split Operation (t=0ms):
- *    - Rectangle D_Opcode: Instruction[31-21] → created for Control unit
- *    - Rectangle D_Rn_Idx: Instruction[9-5] → created for RegFile Read Port 1
- *    - Rectangle D_Rm_Idx: Instruction[20-16] → created for MuxReg2Loc input 0
- *    - Rectangle D_Rt_Idx_Mux: Instruction[4-0] → created for MuxReg2Loc input 1
- *    - Rectangle D_Write_Addr_Idx: Instruction[4-0] → created for RegFile Write Port
- *    - Rectangle D_Imm: Immediate bits → created for SignExtend
- *    - Rectangle D_Funct: Function bits → created for ALUControl
- * 
- * 3. Rectangle Positioning (t=100ms):
- *    - D_Opcode travels to Control unit (ready for Execute stage split)
- *    - D_Rn_Idx travels to RegFile Read1 port
- *    - D_Rm_Idx travels to MuxReg2Loc input '0'
- *    - D_Rt_Idx_Mux travels to MuxReg2Loc input '1'
- *    - D_Write_Addr_Idx travels to RegFile Write port
- *    - D_Imm travels to SignExtend
- *    - D_Funct travels to ALUControl
- * 
- * Final State: Seven active rectangles positioned at their components as specified in workflow guide:
- * - D_Opcode: At Control unit (ready for split operation in Execute stage)
- * - D_Rn_Idx: At RegFile Read1 port
- * - D_Rm_Idx: At MuxReg2Loc input '0'
- * - D_Rt_Idx_Mux: At MuxReg2Loc input '1'
- * - D_Write_Addr_Idx: At RegFile Write port
- * - D_Imm: At SignExtend
- * - D_Funct: At ALUControl
- * 
- * Note: Rectangle usage by instruction type:
- * - R-type: Uses D_Opcode, D_Rn_Idx, D_Rm_Idx, D_Write_Addr_Idx, D_Funct
- * - I-type: Uses D_Opcode, D_Rn_Idx, D_Write_Addr_Idx, D_Imm
- * - D-type: Uses D_Opcode, D_Rn_Idx, D_Write_Addr_Idx (load) or D_Rm_Idx (store), D_Imm
- * - B-type: Uses D_Opcode, D_Imm
- */
 
 // Validate that all wire paths exist in CPUDatapath.tsx
 const idValidation = validateStagePaths('ID', [

@@ -6,6 +6,7 @@ export interface ComponentHighlight {
   highlightType: 'active' | 'processing' | 'complete' | 'split' | 'merge' | 'transform' | 'transfer';
   duration: number;
   intensity?: number; // 0-1, for variable highlight intensity
+  wirePaths?: string[]; // Array of wire path IDs to highlight
 }
 
 interface ComponentHighlighterProps {
@@ -22,8 +23,7 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
   allowMultipleHighlights = true // Default to true for multi-circle support
 }) => {
   const highlightRefs = useRef<Map<string, SVGRectElement>>(new Map());
-  const animationRefs = useRef<Map<string, gsap.core.Timeline>>(new Map());
-  // Color mapping for different highlight types
+  const animationRefs = useRef<Map<string, gsap.core.Timeline>>(new Map());  // Color mapping for different highlight types
   const getHighlightColor = (type: ComponentHighlight['highlightType']) => {
     switch (type) {
       case 'active':
@@ -33,13 +33,13 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
       case 'complete':
         return '#10B981'; // Emerald
       case 'split':
-        return '#F59E0B'; // Amber - for split operations
+        return '#FCD34D'; // Yellow - for split operations
       case 'merge':
-        return '#8B5CF6'; // Violet - for merge operations
+        return '#FCD34D'; // Yellow - for merge operations
       case 'transform':
-        return '#EF4444'; // Red - for transform operations
+        return '#FCD34D'; // Yellow - for transform operations
       case 'transfer':
-        return '#06B6D4'; // Cyan - for transfer operations
+        return '#FCD34D'; // Yellow - for transfer operations (move)
       default:
         return '#22C55E';
     }

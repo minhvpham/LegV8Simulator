@@ -25,13 +25,14 @@ export class InstructionAnimationController {
   private animationSequencer: AnimationSequencer;
   private activeCircles: Map<string, DataCircle> = new Map();
   private stageDataFlows: StageDataFlow[] = [];
-  
-  // Callback functions for animation events
+    // Callback functions for animation events
   private callbacks = {
     onStageStart: (stage: ExecutionStage, stageIndex: number, wirePath?: Point[]) => {},
     onStageComplete: (stage: ExecutionStage, stageIndex: number) => {},
     onAnimationComplete: () => {},
     onComponentHighlight: (componentIds: string[]) => {},
+    onOperationHighlight: (highlights: ComponentHighlight[]) => {},
+    onClearHighlights: () => {},
     onCircleCreate: (circle: DataCircle) => {},
     onCircleUpdate: (circle: DataCircle) => {},
     onCircleDestroy: (circleId: string) => {}
@@ -56,8 +57,7 @@ export class InstructionAnimationController {
         console.error(`Animation error for circle ${circleId}:`, error);
       }
     });
-  }
-  /**
+  }  /**
    * Set callback functions for animation events
    */
   setCallbacks(callbacks: {
@@ -65,6 +65,8 @@ export class InstructionAnimationController {
     onStageComplete?: (stage: ExecutionStage, stageIndex: number) => void;
     onAnimationComplete?: () => void;
     onComponentHighlight?: (componentIds: string[]) => void;
+    onOperationHighlight?: (highlights: ComponentHighlight[]) => void;
+    onClearHighlights?: () => void;
     onCircleCreate?: (circle: DataCircle) => void;
     onCircleUpdate?: (circle: DataCircle) => void;
     onCircleDestroy?: (circleId: string) => void;
@@ -271,20 +273,30 @@ export class InstructionAnimationController {
     }
   }  /**
    * Execute split operation: one circle becomes multiple circles
-   */
-  private async executeSplitOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
-    console.log('Executing split operation:', operation);
+   */  private async executeSplitOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    console.log('🔍 DEBUG: Executing split operation:', operation);
+    console.log('🎯 DEBUG: Requested sourceCircleIds:', operation.sourceCircleIds);
+    console.log('📋 DEBUG: Available active circles:', Array.from(this.activeCircles.keys()));
+    console.log('📊 DEBUG: Active circles map:', this.activeCircles);
     
     let sourceCircle: DataCircle | undefined;
     
     // Try to find source circle by ID first (exact match)
     if (operation.sourceCircleIds.length > 0) {
       const targetId = operation.sourceCircleIds[0];
+      console.log('🔎 DEBUG: Looking for exact circle ID:', targetId);
       sourceCircle = this.activeCircles.get(targetId);
       
+      if (sourceCircle) {
+        console.log('✅ DEBUG: Found exact match for ID:', targetId, 'Circle:', sourceCircle);
+      } else {
+        console.log('❌ DEBUG: No exact match found for ID:', targetId);
+      }      
       // If not found by exact ID, try to find by data type or pattern
       if (!sourceCircle) {
+        console.log('🔍 DEBUG: Trying fallback circle selection...');
         const activeCircles = Array.from(this.activeCircles.values());
+        console.log('🔄 DEBUG: Available circles for fallback:', activeCircles.map(c => ({id: c.id, type: c.dataType, value: c.dataValue})));
         
         // For ID stage, look for instruction circle at InsMem
         if (stageName.includes('Decode') || stageName.includes('ID')) {
@@ -295,24 +307,39 @@ export class InstructionAnimationController {
           );
           
           if (sourceCircle) {
-            console.log('Found instruction circle for ID stage:', sourceCircle.id, 'with data:', sourceCircle.dataValue);
+            console.log('🎯 DEBUG: Found instruction circle for ID stage:', sourceCircle.id, 'with data:', sourceCircle.dataValue);
+          } else {
+            console.log('❌ DEBUG: No instruction circle found for ID stage');
           }
         }
-        
-        // General fallback: look for circle by type matching the requested ID
+          // General fallback: look for circle by type matching the requested ID
         if (!sourceCircle) {
+          console.log('🔍 DEBUG: Trying general type-based fallback...');
           if (targetId.includes('instruction')) {
             sourceCircle = activeCircles.find(circle => circle.dataType === 'instruction');
-          } else if (targetId.includes('pc')) {
+            console.log('🎯 DEBUG: Looking for instruction type, found:', sourceCircle?.id);
+          } else if (targetId === 'D_PC_Plus_4' || targetId.includes('PC_Plus')) {
+            sourceCircle = activeCircles.find(circle => circle.dataType === 'pc_value' && circle.id !== 'D_PC_Branch');
+            console.log('🎯 DEBUG: Looking for PC_Plus_4 type, found:', sourceCircle?.id);
+          } else if (targetId.includes('Opcode') || targetId.toLowerCase().includes('opcode')) {
+            // Specific handling for D_Opcode - look for instruction type, not pc type!
+            sourceCircle = activeCircles.find(circle => 
+              circle.id.toLowerCase().includes('opcode') || 
+              (circle.dataType === 'instruction' && circle.dataValue.toString().includes('ADDI'))
+            );
+            console.log('🎯 DEBUG: Looking for Opcode, found:', sourceCircle?.id);
+          } else if (targetId.includes('PC') && !targetId.includes('Opcode')) {
             sourceCircle = activeCircles.find(circle => circle.dataType === 'pc_value');
+            console.log('🎯 DEBUG: Looking for pc type, found:', sourceCircle?.id);
           }
         }
       }
     }
-    
-    // If no source circle specified or found, use context-appropriate fallback
+      // If no source circle specified or found, use context-appropriate fallback
     if (!sourceCircle && this.activeCircles.size > 0) {
+      console.log('🔄 DEBUG: Using final fallback selection...');
       const activeCircles = Array.from(this.activeCircles.values());
+      console.log('🔄 DEBUG: Final fallback candidates:', activeCircles.map(c => ({id: c.id, type: c.dataType})));
       
       // For ID stage, prioritize instruction circles
       if (stageName.includes('Decode') || stageName.includes('ID')) {
@@ -322,14 +349,14 @@ export class InstructionAnimationController {
         );
         
         if (sourceCircle) {
-          console.log('ID stage using instruction circle as source:', sourceCircle.id);
+          console.log('🎯 DEBUG: ID stage using instruction circle as source:', sourceCircle.id);
         } else {
           // Look for any circle at InsMem component
           sourceCircle = activeCircles.find(circle => 
             (circle as any).currentComponent === 'InsMem'
           );
           if (sourceCircle) {
-            console.log('ID stage using circle at InsMem:', sourceCircle.id);
+            console.log('🎯 DEBUG: ID stage using circle at InsMem:', sourceCircle.id);
           }
         }
       }
@@ -337,7 +364,8 @@ export class InstructionAnimationController {
       // General fallback: use first active circle
       if (!sourceCircle) {
         sourceCircle = activeCircles[0];
-        console.log('Split using first active circle as source:', sourceCircle.id);
+        console.log('⚠️ DEBUG: Split using first active circle as source:', sourceCircle.id);
+        console.log('🚨 DEBUG: THIS IS THE PROBLEM! Using wrong circle instead of requested:', operation.sourceCircleIds[0]);
       }
     }
       // If still no source circle, this might be the start of a new instruction
@@ -390,9 +418,17 @@ export class InstructionAnimationController {
       }
       console.error('⚠️  Check flow definition and circle creation logic');
       return;
+    }    console.log(`🎯 DEBUG: Final selected source circle: ${sourceCircle?.id} for splitting into ${operation.splitResults?.length || 0} new circles`);
+    
+    if (sourceCircle && operation.sourceCircleIds[0] !== sourceCircle.id) {
+      console.error('🚨 BUG DETECTED! Requested circle:', operation.sourceCircleIds[0], 'but using circle:', sourceCircle.id);
     }
 
-    console.log(`Splitting circle ${sourceCircle.id} into ${operation.splitResults.length} new circles`);
+    // Highlight components for split operation
+    const sourceComponent = this.getComponentNameFromPosition(sourceCircle.position);
+    const targetComponents = operation.splitResults.map(result => result.targetComponent);
+    const allComponents = [sourceComponent, ...targetComponents];
+    this.highlightOperationComponents('split', allComponents);
 
     // Create new circles from split with real CPU data
     const newCircles: DataCircle[] = [];
@@ -460,44 +496,100 @@ export class InstructionAnimationController {
           this.callbacks.onCircleUpdate(newCircle);
         }
       });
-    }
-
-    // Execute all split animations in parallel
+    }    // Execute all split animations in parallel
     console.log(`Executing ${animations.length} split animations in parallel`);
-    await this.animationSequencer.executeParallel(animations);
+    await this.animationSequencer.executeParallel(animations);    // Check if the operation wants to preserve the source circle (default is false)
+    const shouldPreserveSource = operation.preserveSource === true;
+    
+    if (shouldPreserveSource) {
+      console.log(`Preserving source circle ${sourceCircle.id} due to preserveSource flag in DataFlowOperation`);
+      // Keep the source circle active, just update its opacity back to normal if needed
+      sourceCircle.opacity = 1;
+      this.callbacks.onCircleUpdate(sourceCircle);
+    } else {
+      // Original behavior: deactivate source circle with fade out
+      const fadeOutAnimation: CircleAnimation = {
+        circleId: sourceCircle.id,
+        operation: 'fade-out',
+        duration: 300,
+        startPosition: sourceCircle.position,
+        onUpdate: (position: Point, opacity: number) => {
+          sourceCircle.opacity = opacity;
+          this.callbacks.onCircleUpdate(sourceCircle);
+        }
+      };
 
-    // Deactivate source circle with fade out
-    const fadeOutAnimation: CircleAnimation = {
-      circleId: sourceCircle.id,
-      operation: 'fade-out',
-      duration: 300,
-      startPosition: sourceCircle.position,
-      onUpdate: (position: Point, opacity: number) => {
-        sourceCircle.opacity = opacity;
-        this.callbacks.onCircleUpdate(sourceCircle);
-      }
-    };
+      await this.animationSequencer.executeSequential([fadeOutAnimation]);
 
-    await this.animationSequencer.executeSequential([fadeOutAnimation]);
-
-    sourceCircle.isActive = false;
-    this.activeCircles.delete(sourceCircle.id);
-    this.callbacks.onCircleDestroy(sourceCircle.id);
+      sourceCircle.isActive = false;
+      this.activeCircles.delete(sourceCircle.id);
+      this.callbacks.onCircleDestroy(sourceCircle.id);
+    }
     
     console.log(`Split operation complete. Active circles: ${this.activeCircles.size}`);
   }
   /**
-   * Execute merge operation: multiple circles become one circle
-   */  private async executeMergeOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
-    console.log('Executing merge operation:', operation);
+   * Execute merge operation: multiple circles become one circle   */  private async executeMergeOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    console.log('=== MERGE OPERATION DEBUG ===');
+    console.log('Operation:', operation);
+    console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
+    console.log('Target component:', operation.targetComponent);
+    
+    console.log('Current active circles:');
+    this.activeCircles.forEach((circle, id) => {
+      console.log(`  - ID: ${id}, DataType: ${circle.dataType}, DataValue: ${circle.dataValue}, Stage: ${circle.stage}`);
+    });
+    
+    // Highlight target component for merge operation (where multiple things converge)
+    this.highlightOperationComponents('merge', [operation.targetComponent]);
     
     let sourceCircles: DataCircle[] = [];
     
-    // If source circle IDs are specified, try to find them
+    // Try to find source circles by ID with fallback logic (similar to transform/move operations)
     if (operation.sourceCircleIds.length > 0) {
-      sourceCircles = operation.sourceCircleIds
-        .map(id => this.activeCircles.get(id))
-        .filter(Boolean) as DataCircle[];
+      for (const requestedId of operation.sourceCircleIds) {
+        let foundCircle: DataCircle | undefined;
+        
+        // First try exact match
+        foundCircle = this.activeCircles.get(requestedId);
+        
+        // If exact match fails, try case-insensitive matching with base name
+        if (!foundCircle) {
+          const baseName = requestedId.toLowerCase();
+          console.log(`Merge: Exact match failed for '${requestedId}', searching for circles with base name '${baseName}'`);
+          
+          // Try exact base name match first
+          this.activeCircles.forEach((circle, circleId) => {
+            if (!foundCircle && circleId.toLowerCase().startsWith(baseName + '_')) {
+              console.log(`Merge: Found matching circle by base name: ${circleId}`);
+              foundCircle = circle;
+            }
+          });
+          
+          // If still not found, try partial matching (removing underscores and checking contains)
+          if (!foundCircle) {
+            const cleanBaseName = baseName.replace(/_/g, '');
+            console.log(`Merge: Still not found, trying clean base name '${cleanBaseName}'`);
+            
+            this.activeCircles.forEach((circle, circleId) => {
+              if (!foundCircle) {
+                const cleanCircleId = circleId.toLowerCase().replace(/_/g, '');
+                if (cleanCircleId.includes(cleanBaseName) || cleanBaseName.includes(cleanCircleId.split(/\d/)[0])) {
+                  console.log(`Merge: Found matching circle by clean base name: ${circleId}`);
+                  foundCircle = circle;
+                }
+              }
+            });
+          }
+        }
+        
+        if (foundCircle) {
+          sourceCircles.push(foundCircle);
+          console.log(`Merge: Successfully found circle for ID '${requestedId}': ${foundCircle.id}`);
+        } else {
+          console.error(`🔴 MERGE: Could not find circle for ID '${requestedId}'`);
+        }
+      }
     }    // If no source circles found by ID, fail fast in development
     if (sourceCircles.length === 0) {
       const activeCircles = Array.from(this.activeCircles.values());
@@ -508,10 +600,12 @@ export class InstructionAnimationController {
       return;
     }
 
-    if (sourceCircles.length === 0) {
-      console.error('🔴 MERGE OPERATION FAILED - No source circles available!');
-      console.error('⚠️  This should never happen - check circle creation logic');
-      return;
+    if (sourceCircles.length < operation.sourceCircleIds.length) {
+      console.warn(`⚠️ MERGE: Found ${sourceCircles.length} circles but expected ${operation.sourceCircleIds.length}`);
+      console.warn('📋 Found circles:', sourceCircles.map(c => c.id));
+      console.warn('🔍 Missing circles:', operation.sourceCircleIds.filter(id => 
+        !sourceCircles.some(circle => circle.id.toLowerCase().includes(id.toLowerCase().replace(/_/g, '')))
+      ));
     }// Get target position for merge
     const targetPosition = this.getPositionWithOffset(operation.targetComponent, 0);
     
@@ -563,20 +657,29 @@ export class InstructionAnimationController {
         mergedCircle.opacity = opacity;
         this.callbacks.onCircleUpdate(mergedCircle);
       }
-    };
-
-    // Fade in merged circle
+    };    // Fade in merged circle
     await this.animationSequencer.executeSequential([fadeInAnimation]);
     this.callbacks.onCircleCreate(mergedCircle);
 
-    // Remove source circles
-    sourceCircles.forEach(circle => {
-      circle.isActive = false;
-      this.activeCircles.delete(circle.id);
-      this.callbacks.onCircleDestroy(circle.id);
-    });
-  }  /**
-   * Execute transform operation: circle changes its data content   */  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    // Check if the operation wants to preserve the source circles (default is false)
+    const shouldPreserveSource = operation.preserveSource === true;
+    
+    if (shouldPreserveSource) {
+      console.log(`Preserving source circles due to preserveSource flag in DataFlowOperation`);
+      // Keep the source circles active, just update their opacity back to normal if needed
+      sourceCircles.forEach(circle => {
+        circle.opacity = 1;
+        this.callbacks.onCircleUpdate(circle);
+      });
+    } else {
+      // Original behavior: remove source circles
+      sourceCircles.forEach(circle => {
+        circle.isActive = false;
+        this.activeCircles.delete(circle.id);
+        this.callbacks.onCircleDestroy(circle.id);
+      });
+    }
+  }  /**   * Execute transform operation: circle changes its data content   */  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
     console.log('=== TRANSFORM OPERATION DEBUG ===');
     console.log('Operation:', operation);
     console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
@@ -586,6 +689,9 @@ export class InstructionAnimationController {
     this.activeCircles.forEach((circle, id) => {
       console.log(`  - ID: ${id}, DataType: ${circle.dataType}, DataValue: ${circle.dataValue}, Stage: ${circle.stage}`);
     });
+    
+    // Highlight target component for transform operation (where data is processed/changed)
+    this.highlightOperationComponents('transform', [operation.targetComponent]);
     
     let sourceCircle: DataCircle | undefined;
       // Try to find source circle by ID first
@@ -683,15 +789,24 @@ export class InstructionAnimationController {
       );
         // Give it a proper ID based on the result data - use resultData directly as ID
       newCircle.id = operation.resultData;
-      
-      // Add to active circles
+        // Add to active circles
       this.activeCircles.set(newCircle.id, newCircle);
       this.callbacks.onCircleCreate(newCircle);
       
-      // Remove the source circle
-      sourceCircle.isActive = false;
-      this.activeCircles.delete(sourceCircle.id);
-      this.callbacks.onCircleDestroy(sourceCircle.id);
+      // Check if the operation wants to preserve the source circle (default is false)
+      const shouldPreserveSource = operation.preserveSource === true;
+      
+      if (shouldPreserveSource) {
+        console.log(`Preserving source circle ${sourceCircle.id} due to preserveSource flag in DataFlowOperation`);
+        // Keep the source circle active, just update its opacity back to normal if needed
+        sourceCircle.opacity = 1;
+        this.callbacks.onCircleUpdate(sourceCircle);
+      } else {
+        // Original behavior: remove the source circle
+        sourceCircle.isActive = false;
+        this.activeCircles.delete(sourceCircle.id);
+        this.callbacks.onCircleDestroy(sourceCircle.id);
+      }
       
       console.log(`Created new circle: ${newCircle.id} with value: ${newValue}`);
       
@@ -808,10 +923,14 @@ export class InstructionAnimationController {
       console.error('🔴 MOVE OPERATION FAILED - No source circle found!');
       console.error('⚠️  This should never happen - check circle creation logic');
       return;
-    }
+    }    console.log(`FINAL SELECTION - Moving circle: ID='${sourceCircle.id}', DataValue='${sourceCircle.dataValue}', DataType='${sourceCircle.dataType}' to component '${operation.targetComponent}'`);
+    console.log('==============================');
 
-    console.log(`FINAL SELECTION - Moving circle: ID='${sourceCircle.id}', DataValue='${sourceCircle.dataValue}', DataType='${sourceCircle.dataType}' to component '${operation.targetComponent}'`);
-    console.log('==============================');// Get target position and create wire path
+    // Highlight components for move operation
+    const sourceComponent = this.getComponentNameFromPosition(sourceCircle.position);
+    this.highlightOperationComponents('move', [sourceComponent, operation.targetComponent], operation.wirePath);
+
+    // Get target position and create wire path
     const targetPosition = this.getComponentPosition(operation.targetComponent);
     
     // Resolve wire path - check if operation has specific wire path
@@ -897,19 +1016,50 @@ export class InstructionAnimationController {
       this.callbacks.onCircleUpdate(sourceCircle);
     }
   }
-
   /**
    * Get wire path between two components
    */
   private getWirePathBetweenComponents(sourceComponent: string, targetComponent: string): Point[] {
+    // Map component names to correct format
+    const mappedSource = this.mapComponentName(sourceComponent);
+    const mappedTarget = this.mapComponentName(targetComponent);
+    
     if (this.wirePathCalculator && this.wirePathCalculator.getWirePath) {
-      return this.wirePathCalculator.getWirePath(sourceComponent, targetComponent);
+      return this.wirePathCalculator.getWirePath(mappedSource, mappedTarget);
     }
     // Fallback to direct line
-    const sourcePos = this.getComponentPosition(sourceComponent);
-    const targetPos = this.getComponentPosition(targetComponent);
+    const sourcePos = this.getComponentPosition(mappedSource);
+    const targetPos = this.getComponentPosition(mappedTarget);
     return [sourcePos, targetPos];
   }
+  /**
+   * Map instruction flow component names to actual CPUDatapath component names
+   */
+  private mapComponentName(componentName: string): string {
+    const componentMap: { [key: string]: string } = {
+      // Handle case mismatches
+      'MUXREADREG': 'MuxReadReg',
+      'MUXPC': 'MuxPC',
+      'MUXREG2LOC': 'MuxReg2Loc',
+      'MUXREADMEM': 'MuxReadMem',
+      'REGFILE': 'RegFile',
+      'DATAMEM': 'DataMem', 
+      'ALUMAIN': 'ALUMain',
+      'ALUPC': 'ALUPC',
+      'ALUBRANCH': 'ALUBranch',
+      'INSMEM': 'InsMem',
+      'SIGNEXTEND': 'SignExtend',
+      'SHIFTLEFT2': 'ShiftLeft2',
+      'CONTROL': 'Control',
+      'ALUCONTROL': 'ALUControl',
+      'ZEROAND': 'ZeroAND',
+      'BRANCHOR': 'BranchOR',
+      // Add any other mappings as needed
+    };
+
+    return componentMap[componentName.toUpperCase()] || componentName;
+  }
+
   /**
    * Get component name from position (reverse lookup)
    */
@@ -970,14 +1120,15 @@ export class InstructionAnimationController {
    */
   getActiveCircles(): Map<string, DataCircle> {
     return new Map(this.activeCircles);
-  }
-
-  /**
+  }  /**
    * Get component position for circle placement
    */
   private getComponentPosition(componentName: string): Point {
+    // Map component name to correct format
+    const mappedName = this.mapComponentName(componentName);
+    
     if (this.wirePathCalculator && this.wirePathCalculator.getComponentCenter) {
-      return this.wirePathCalculator.getComponentCenter(componentName);
+      return this.wirePathCalculator.getComponentCenter(mappedName);
     }
     // Fallback to default position
     return { x: 100, y: 100 };
@@ -1110,13 +1261,103 @@ export class InstructionAnimationController {
     // This will be handled by the ComponentHighlighter component
     console.log('Highlighting components:', componentIds);
   }
-
   /**
    * Reset all highlights
    */
   private resetHighlights(): void {
     // This will be implemented to clear all component highlights
     console.log('Resetting highlights');
+    this.callbacks.onClearHighlights();
+  }  /**
+   * Highlight components for specific operation types
+   */
+  private highlightOperationComponents(
+    operationType: 'move' | 'split' | 'merge' | 'transform',
+    componentIds: string[],
+    wirePath?: any
+  ): void {
+    let highlightType: ComponentHighlight['highlightType'];
+    let duration = 1000;
+
+    // Map operation type to highlight type
+    switch (operationType) {
+      case 'move':
+        highlightType = 'transfer';
+        duration = 800; // Duration should match animation duration
+        break;
+      case 'split':
+        highlightType = 'split';
+        duration = 1000;
+        break;
+      case 'merge':
+        highlightType = 'merge';
+        duration = 800;
+        break;
+      case 'transform':
+        highlightType = 'transform';
+        duration = 600;
+        break;
+      default:
+        highlightType = 'active';
+    }
+
+    // For split operations, also highlight intermediate components if wire paths are involved
+    let allComponentsToHighlight = [...componentIds];
+    
+    if (operationType === 'split' && wirePath) {
+      // Split operations might go through intermediate components - we'll highlight all target components
+      // The componentIds already contains the source and all target components
+    }
+
+    // Get wire path IDs for highlighting
+    let wirePathIds: string[] = [];
+    if (wirePath) {
+      if (operationType === 'move' && componentIds.length >= 2) {
+        // For move operations, highlight the path between source and target
+        wirePathIds = this.getWirePathId(componentIds[0], componentIds[1]);
+      } else if (operationType === 'split' && componentIds.length > 1) {
+        // For split operations, highlight all paths from source to each target
+        const sourceComponent = componentIds[0];
+        for (let i = 1; i < componentIds.length; i++) {
+          wirePathIds = wirePathIds.concat(this.getWirePathId(sourceComponent, componentIds[i]));
+        }
+      }
+    }
+
+    // Create highlight objects
+    const highlights: ComponentHighlight[] = allComponentsToHighlight
+      .filter(id => id && id.trim() !== '') // Filter out empty/undefined IDs
+      .map(componentId => ({
+        componentId,
+        highlightType,
+        duration,
+        intensity: operationType === 'split' ? 1.2 : 1.0, // Extra intensity for split operations
+        wirePaths: wirePathIds.length > 0 ? wirePathIds : undefined
+      }));
+
+    if (highlights.length > 0) {
+      console.log(`Highlighting ${highlights.length} components for ${operationType} operation:`, allComponentsToHighlight);
+      console.log('Wire paths to highlight:', wirePathIds);
+      this.callbacks.onOperationHighlight(highlights);
+    }
+
+    // Auto-clear highlights after operation duration
+    setTimeout(() => {
+      this.resetHighlights();
+    }, duration + 200); // Small delay after operation completion
+  }
+  /**
+   * Get wire path ID between two components
+   */
+  private getWirePathId(sourceComponent: string, targetComponent: string): string[] {
+    // Map component names to correct format
+    const mappedSource = this.mapComponentName(sourceComponent);
+    const mappedTarget = this.mapComponentName(targetComponent);
+    
+    // Generate wire path identifier based on component names
+    // This should match the wire path naming convention in your CPUDatapath
+    const wirePathId = `${mappedSource}_TO_${mappedTarget}`;
+    return [wirePathId];
   }
   /**
    * Get wire path for a stage
@@ -1578,12 +1819,18 @@ export class InstructionAnimationController {
     // Brief pause between stages for visual clarity
     await this.delay(150);
   }
-
   /**
    * Calculate position with offset for multiple circles at same component
    */
   private getPositionWithOffset(componentName: string, circleIndex: number = 0): Point {
     const basePosition = this.getComponentPosition(componentName);
+    
+    // Check if basePosition is null and provide fallback
+    if (!basePosition) {
+      console.error(`🔴 ERROR: Could not get position for component '${componentName}'. Using fallback position.`);
+      // Return a fallback position instead of crashing
+      return { x: 100 + circleIndex * 20, y: 100 + circleIndex * 20 };
+    }
     
     // Apply small offset to avoid overlapping circles
     const offsetDistance = 15; // pixels

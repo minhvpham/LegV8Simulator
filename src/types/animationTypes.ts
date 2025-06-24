@@ -58,6 +58,7 @@ export interface DataFlowOperation {
   splitResults?: SplitOperation[];
   results?: SplitResult[];
   wirePath?: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
+  preserveSource?: boolean; // Optional: if true, keeps the source circle when type is 'split'
 }
 
 export interface StageDataFlow {

@@ -3,6 +3,8 @@ import React from 'react';
 interface ArrowProps {
   color?: string;
   join?: boolean;
+  'data-wire-path'?: string;
+  'data-wire'?: string;
 }
 
 interface UpArrowProps extends ArrowProps {
@@ -96,9 +98,11 @@ export const RightArrow: React.FC<RightArrowProps> = ({
   y, 
   xHead, 
   color = 'black', 
-  join = false 
+  join = false,
+  'data-wire-path': wirePathId,
+  'data-wire': wireId
 }) => (
-  <g>
+  <g data-wire-path={wirePathId} data-wire={wireId}>
     {/* Join circle at tail if specified */}
     {join && (
       <circle
@@ -106,6 +110,8 @@ export const RightArrow: React.FC<RightArrowProps> = ({
         cy={y}
         r={4}
         fill={color}
+        data-wire-path={wirePathId}
+        data-wire={wireId}
       />
     )}
     {/* Arrow body */}
@@ -115,6 +121,8 @@ export const RightArrow: React.FC<RightArrowProps> = ({
       width={xHead - 8 - xTail}
       height={2}
       fill={color}
+      data-wire-path={wirePathId}
+      data-wire={wireId}
     />
     {/* Arrow head */}
     <RightArrowHead x={xHead} y={y + 0.5} color={color} />
