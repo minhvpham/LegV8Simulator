@@ -2518,7 +2518,7 @@ const CPUDatapath: React.FC = () => {
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {phaseInProgress ? 'Processing...' : 'Next Phase'}
+            {phaseInProgress ? 'Processing...' : 'Next Stage'}
           </button>
         </div>
       )}

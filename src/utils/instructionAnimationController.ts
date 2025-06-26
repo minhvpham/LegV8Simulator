@@ -605,7 +605,7 @@ export class InstructionAnimationController {
 
       console.log(`Creating animation for circle ${newCircle.id} to component ${splitResult.targetComponent}`);
       console.log(`🎯 Circle ${newCircle.id} positioning: targetPosition = {x: ${targetPosition.x}, y: ${targetPosition.y}}, componentIndex = ${currentCount}`);
-      if (splitResult.id === 'D_Rn_Idx' || splitResult.id === 'D_Rm_Idx' || splitResult.id === 'D_RegRead2') {
+      if (splitResult.id === 'D_Rn_Idx' || splitResult.id === 'D_Rm_Idx') {
         console.log(`🔍 POSITION DEBUG ${splitResult.id}: value=${newCircle.dataValue}, target=${splitResult.targetComponent}, componentIndex=${currentCount}, pos={x:${targetPosition.x}, y:${targetPosition.y}}`);
       }      animations.push({
         circleId: newCircle.id,
@@ -766,6 +766,85 @@ export class InstructionAnimationController {
       resolvedData = result.dataValue;
       mergedId = result.id;
       mergedDataType = result.dataType;
+      
+      // Special case: Reg2Loc Multiplexer Logic
+      if (operation.targetComponent === 'MuxReg2Loc' && 
+          operation.sourceCircleIds.includes('D_Rm_Idx') && 
+          operation.sourceCircleIds.includes('C_Reg2Loc') && 
+          operation.sourceCircleIds.includes('D_Rt_Idx_Mux')) {
+        
+        console.log('🎯 IMPLEMENTING REG2LOC MULTIPLEXER LOGIC');
+        
+        // Find the control signal value
+        const reg2LocCircle = sourceCircles.find(c => c.id === 'C_Reg2Loc');
+        const rmIdxCircle = sourceCircles.find(c => c.id === 'D_Rm_Idx');
+        const rtIdxCircle = sourceCircles.find(c => c.id === 'D_Rt_Idx_Mux');
+        
+        if (reg2LocCircle && rmIdxCircle && rtIdxCircle) {
+          const reg2LocValue = reg2LocCircle.dataValue.toString();
+          
+          console.log(`🔧 Reg2Loc = ${reg2LocValue}`);
+          console.log(`🔧 D_Rm_Idx = ${rmIdxCircle.dataValue} (Instruction [20-16])`);
+          console.log(`🔧 D_Rt_Idx_Mux = ${rtIdxCircle.dataValue} (Instruction [4-0])`);
+          
+          // Implement multiplexer logic
+          if (reg2LocValue === '0') {
+            // Select input 0: D_Rm_Idx (Instruction field [20-16])
+            resolvedData = rmIdxCircle.dataValue.toString();
+            console.log(`✅ Reg2Loc=0: Selected D_Rm_Idx = ${resolvedData}`);
+          } else {
+            // Select input 1: D_Rt_Idx_Mux (Instruction field [4-0])
+            resolvedData = rtIdxCircle.dataValue.toString();
+            console.log(`✅ Reg2Loc=1: Selected D_Rt_Idx_Mux = ${resolvedData}`);
+          }
+        } else {
+          console.error('🔴 REG2LOC MERGE: Missing required circles');
+          console.error(`reg2LocCircle: ${reg2LocCircle?.id}, rmIdxCircle: ${rmIdxCircle?.id}, rtIdxCircle: ${rtIdxCircle?.id}`);
+        }
+      }
+      
+      // Special case: ALU Control Signal Generation
+      if (operation.targetComponent === 'ALUControl' && 
+          operation.sourceCircleIds.includes('C_ALUOp') && 
+          operation.sourceCircleIds.includes('D_Funct')) {
+        
+        console.log('🎯 IMPLEMENTING ALU CONTROL SIGNAL GENERATION');
+        
+        // Find the ALUOp and function field values
+        const aluOpCircle = sourceCircles.find(c => c.id === 'C_ALUOp');
+        const functCircle = sourceCircles.find(c => c.id === 'D_Funct');
+        
+        if (aluOpCircle && functCircle) {
+          const aluOpValue = aluOpCircle.dataValue.toString();
+          const functValue = functCircle.dataValue.toString();
+          
+          console.log(`🔧 ALUOp = ${aluOpValue} (binary)`);
+          console.log(`🔧 D_Funct = ${functValue} (function field)`);
+          
+          // Generate ALU control signals based on ALUOp and function field
+          // For I-format ADDI: ALUOp=10, function field irrelevant -> ALU should ADD (0010)
+          if (aluOpValue === '10') {
+            // Arithmetic/Logic instruction (both I-format and R-format): perform ADD operation for ADDI
+            resolvedData = '0010';
+            console.log(`✅ ALUOp=10 (Arithmetic): Generated ALU Control = ${resolvedData} (ADD)`);
+          } else if (aluOpValue === '01') {
+            // Branch instruction: use function field to determine operation
+            resolvedData = '0111'; // Set Less Than for branch comparisons
+            console.log(`✅ ALUOp=01 (Branch): Generated ALU Control = ${resolvedData} (Set Less Than)`);
+          } else if (aluOpValue === '00') {
+            // Load/Store instruction: perform ADD for address calculation
+            resolvedData = '0010';
+            console.log(`✅ ALUOp=00 (Load/Store): Generated ALU Control = ${resolvedData} (ADD for address)`);
+          } else {
+            // Other ALUOp values (11 = Move, etc.)
+            resolvedData = '1111'; // Pass through B operand
+            console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
+          }
+        } else {
+          console.error('🔴 ALU CONTROL MERGE: Missing required circles');
+          console.error(`aluOpCircle: ${aluOpCircle?.id}, functCircle: ${functCircle?.id}`);
+        }
+      }
       
       // Resolve actual data value if using CPU state
     }

@@ -33,6 +33,9 @@ export function resolveWirePathCoordinates(wirePathObject: any, components: any,
  * - InsMem -> MuxReg2Loc: Rm register [20-16] to register source MUX
  * - InsMem -> SignExtend: Immediate value for sign extension
  * - InsMem -> ALUControl: Function code bits for ALU operation
+ * 
+ * Note: Read Register 2 is not directly connected for I-format instructions.
+ * The Rm field [20-16] goes to MuxReg2Loc, which may route to RegFile Read2 based on Reg2Loc control.
  */
 export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   stageName: "Instruction Decode (ID)",
@@ -54,7 +57,7 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
       ]
     },
     
-    // Second: Split machine code into 8 instruction fields for different components
+    // Second: Split machine code into 7 instruction fields for different components
     {
       type: 'split',
       timing: 200,
@@ -109,13 +112,6 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
           dataType: 'function_code',
           targetComponent: 'ALUControl',
           wirePath: INSMEM_TO_ALUCONTROL_PATH
-        },
-        {
-          id: 'D_RegRead2',
-          dataValue: 'INSTRUCTION_FIELD_20_16', // Bits [20-16] for second read register
-          dataType: 'register_field',
-          targetComponent: 'RegFile',
-          wirePath: INSMEM_TO_REGFILE_READ1_PATH // Will need separate path for read2
         }
       ]
     }
@@ -129,7 +125,6 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
     'D_Write_Addr_Idx',     // At RegFile Write port
     'D_Imm',                // At SignExtend for immediate processing
     'D_Funct',              // At ALUControl for operation selection
-    'D_RegRead2',           // At RegFile Read2 port
     'D_PC_Branch'           // From IF stage, for branch calculations
   ],
   duration: 800,

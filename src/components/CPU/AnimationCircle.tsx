@@ -37,32 +37,57 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
   const circleRef = useRef<SVGGElement>(null);
   const animationRef = useRef<gsap.core.Timeline | null>(null);
 
-  // Format display text
-  const getDisplayText = (value: string | number): string => {
+  // Calculate rectangle dimensions and format display text together
+  const getDisplayTextAndDimensions = (value: string | number) => {
     const str = value.toString();
-    if (str.length <= 12) return str;
+    const charWidth = 7; // Average character width in pixels for 10px monospace font
+    const padding = 16; // Horizontal padding
+    const minWidth = 30; // Minimum width
+    const maxWidth = 350; // Much more generous maximum width
+    const height = 20; // Fixed height
     
-    // Smart truncation based on data type
+    // Calculate full text width first
+    const fullTextWidth = str.length * charWidth + padding;
+    
+    // Be much more generous - only truncate for extremely long strings
+    if (fullTextWidth <= maxWidth || str.length <= 40) {
+      const width = Math.max(minWidth, fullTextWidth);
+      return { 
+        displayText: str, 
+        width, 
+        height 
+      };
+    }
+    
+    // Only truncate if absolutely necessary (very long strings)
+    let truncatedText = str;
+    
     if (str.startsWith('0x')) {
-      return str.length > 10 ? `${str.slice(0, 6)}...` : str;
+      // For hex values, be very generous - only truncate if extremely long
+      if (str.length > 35) {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
+    } else if (str.includes(' ')) {
+      // For instructions, prefer first word but allow longer if reasonable
+      const firstWord = str.split(' ')[0];
+      if (firstWord.length <= 35) {
+        truncatedText = firstWord;
+      } else {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
+    } else {
+      // For binary strings and other data, be very generous
+      if (str.length > 35) {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
     }
-    if (str.includes(' ')) {
-      return str.split(' ')[0]; // First word for instructions
-    }
-    return str.length > 12 ? `${str.slice(0, 9)}...` : str;
-  };
-
-  // Calculate rectangle dimensions based on text content
-  const calculateRectDimensions = (text: string) => {
-    const charWidth = 6; // Average character width in pixels
-    const padding = 8; // Horizontal padding
-    const minWidth = 24; // Minimum width
-    const height = 18; // Fixed height
     
-    const textWidth = text.length * charWidth;
-    const width = Math.max(minWidth, textWidth + padding);
-    
-    return { width, height };
+    const width = Math.max(minWidth, truncatedText.length * charWidth + padding);
+    return { 
+      displayText: truncatedText, 
+      width, 
+      height 
+    };
   };
 
   // Get text color based on background
@@ -128,9 +153,8 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
     return null;
   }
 
-  const displayText = getDisplayText(circle.dataValue);
+  const { displayText, width, height } = getDisplayTextAndDimensions(circle.dataValue);
   const textColor = getTextColor(circle.color);
-  const { width, height } = calculateRectDimensions(displayText);
 
   return (
     <g 
@@ -199,21 +223,59 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
   const textRef = useRef<SVGTextElement>(null);
   const animationRef = useRef<gsap.core.Timeline | null>(null);
 
-  // Format display text
-  const getDisplayText = (): string => {
-    if (!dataValue || !showText) return '';
+  // Calculate dimensions and format display text
+  const getDisplayTextAndDimensions = () => {
+    if (!dataValue || !showText) return { displayText: '', width: 30, height: 20 };
     
     const str = dataValue.toString();
-    if (str.length <= 8) return str;
+    const charWidth = 7; // Average character width in pixels for 10px monospace font
+    const padding = 16; // Horizontal padding
+    const minWidth = 30; // Minimum width
+    const maxWidth = 350; // Much more generous maximum width
+    const height = 20; // Fixed height
     
-    // Smart truncation
+    // Calculate full text width first
+    const fullTextWidth = str.length * charWidth + padding;
+    
+    // Be much more generous - only truncate for extremely long strings
+    if (fullTextWidth <= maxWidth || str.length <= 40) {
+      const width = Math.max(minWidth, fullTextWidth);
+      return { 
+        displayText: str, 
+        width, 
+        height 
+      };
+    }
+    
+    // Only truncate if absolutely necessary (very long strings)
+    let truncatedText = str;
+    
     if (str.startsWith('0x')) {
-      return str.length > 10 ? `${str.slice(0, 6)}...` : str;
+      // For hex values, be very generous - only truncate if extremely long
+      if (str.length > 35) {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
+    } else if (str.includes(' ')) {
+      // For instructions, prefer first word but allow longer if reasonable
+      const firstWord = str.split(' ')[0];
+      if (firstWord.length <= 35) {
+        truncatedText = firstWord;
+      } else {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
+    } else {
+      // For binary strings and other data, be very generous
+      if (str.length > 35) {
+        truncatedText = `${str.slice(0, 32)}...`;
+      }
     }
-    if (str.includes(' ')) {
-      return str.split(' ')[0];
-    }
-    return `${str.slice(0, 6)}...`;
+    
+    const width = Math.max(minWidth, truncatedText.length * charWidth + padding);
+    return { 
+      displayText: truncatedText, 
+      width, 
+      height 
+    };
   };
 
   useEffect(() => {
@@ -283,16 +345,9 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
   if (!isVisible) {
     return null;
   }
-  const displayText = getDisplayText();
-  const textColor = color === '#EF4444' || color === '#3B82F6' || color === '#8B5CF6' ? '#FFFFFF' : '#000000';
   
-  // Calculate rectangle dimensions for the original circle too
-  const charWidth = 6;
-  const padding = 8;
-  const minWidth = 24;
-  const height = 18;
-  const textWidth = displayText.length * charWidth;
-  const width = Math.max(minWidth, textWidth + padding);
+  const { displayText, width, height } = getDisplayTextAndDimensions();
+  const textColor = color === '#EF4444' || color === '#3B82F6' || color === '#8B5CF6' ? '#FFFFFF' : '#000000';
 
   return (
     <g>
