@@ -36,77 +36,103 @@ export function resolveWirePathCoordinates(wirePathObject: any, components: any,
  */
 export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   stageName: "Instruction Decode (ID)",
-  initialCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // From IF stage
-  operations: [    // 7-way split of instruction word to different components
+  initialCircles: ['D_PC_Input', 'D_Instruction', 'D_PC_Branch'], // From IF stage
+  operations: [
+    // First: InsMem reads the PC address and outputs machine code in binary
+    {
+      type: 'transform',
+      timing: 0,
+      sourceCircleIds: ['D_Instruction'], // PC address at InsMem
+      targetComponent: 'InsMem',
+      results: [
+        {
+          id: 'D_MachineCode',
+          dataValue: 'INSTRUCTION_BINARY', // Will be resolved to 32-bit binary
+          dataType: 'instruction',
+          targetComponent: 'InsMem'
+        }
+      ]
+    },
+    
+    // Second: Split machine code into 8 instruction fields for different components
     {
       type: 'split',
-      timing: 0,
-      sourceCircleIds: ['D_Instruction'], // Split the instruction rectangle
+      timing: 200,
+      sourceCircleIds: ['D_MachineCode'], // Split the binary instruction
       targetComponent: 'InsMem',
       results: [
         {
           id: 'D_Opcode',
-          dataValue: 'Test',
-          dataType: 'instruction',
+          dataValue: 'INSTRUCTION_FIELD_31_21', // Bits [31-21] for opcode
+          dataType: 'instruction_field',
           targetComponent: 'Control',
           wirePath: INSMEM_TO_CONTROL_PATH
         },
         {
           id: 'D_Rn_Idx',
-          dataValue: 'Test',
+          dataValue: 'INSTRUCTION_FIELD_9_5', // Bits [9-5] for Rn register
           dataType: 'register_field',
-          targetComponent: 'RegFile_Read1',
+          targetComponent: 'RegFile',
           wirePath: INSMEM_TO_REGFILE_READ1_PATH
         },
         {
           id: 'D_Rm_Idx',
-          dataValue: 'Test',
+          dataValue: 'INSTRUCTION_FIELD_20_16', // Bits [20-16] for Rm register
           dataType: 'register_field',
-          targetComponent: 'MuxReg2Loc1',
+          targetComponent: 'MuxReg2Loc',
           wirePath: INSMEM_TO_MUXREG2LOC1_PATH
         },
         {
-          id: 'D_Rt_Idx_Mux',
-          dataValue: 'Test',
+          id: 'D_Rt_Idx',
+          dataValue: 'INSTRUCTION_FIELD_4_0', // Bits [4-0] for Rt/Rd register
           dataType: 'register_field',
-          targetComponent: 'MuxReg2Loc2',
+          targetComponent: 'MuxReg2Loc',
           wirePath: INSMEM_TO_MUXREG2LOC2_PATH
         },
         {
           id: 'D_Write_Addr_Idx',
-          dataValue: 'Test',
+          dataValue: 'INSTRUCTION_FIELD_4_0', // Bits [4-0] for write register
           dataType: 'register_field',
-          targetComponent: 'RegFile_Write',
+          targetComponent: 'RegFile',
           wirePath: INSMEM_TO_REGFILE_WRITE_PATH
         },
         {
           id: 'D_Imm',
-          dataValue: 'Test',
+          dataValue: 'INSTRUCTION_FIELD_31_0', // Full instruction [31-0] for immediate
           dataType: 'immediate_field',
           targetComponent: 'SignExtend',
           wirePath: INSMEM_TO_SIGNEXTEND_PATH
         },
         {
           id: 'D_Funct',
-          dataValue: 'Test',
+          dataValue: 'INSTRUCTION_FIELD_31_21', // Bits [31-21] for function code
           dataType: 'function_code',
           targetComponent: 'ALUControl',
           wirePath: INSMEM_TO_ALUCONTROL_PATH
+        },
+        {
+          id: 'D_RegRead2',
+          dataValue: 'INSTRUCTION_FIELD_20_16', // Bits [20-16] for second read register
+          dataType: 'register_field',
+          targetComponent: 'RegFile',
+          wirePath: INSMEM_TO_REGFILE_READ1_PATH // Will need separate path for read2
         }
       ]
     }
-  ],  finalCircles: [
-    'D_PC_Plus_4',          // From IF stage, needed for PC update
-    'D_Opcode',              // At Control unit, ready for split
-    'D_Rn_Idx',             // At RegFile Read1 port
-    'D_Rm_Idx',             // At MuxReg2Loc input '0'
-    'D_Rt_Idx_Mux',         // At MuxReg2Loc input '1'
-    'D_Write_Addr_Idx',     // At RegFile Write port
-    'D_Imm',                // At SignExtend
-    'D_Funct',               // At ALUControl
-    'D_PC_Branch' // Optional, if branch calculation needed
   ],
-  duration: 500,
+  finalCircles: [
+    'D_PC_Input',           // From IF stage, needed for PC calculations  
+    'D_Opcode',             // At Control unit, ready for signal generation
+    'D_Rn_Idx',             // At RegFile Read1 port
+    'D_Rm_Idx',             // At MuxReg2Loc for register selection
+    'D_Rt_Idx',             // At MuxReg2Loc for register selection
+    'D_Write_Addr_Idx',     // At RegFile Write port
+    'D_Imm',                // At SignExtend for immediate processing
+    'D_Funct',              // At ALUControl for operation selection
+    'D_RegRead2',           // At RegFile Read2 port
+    'D_PC_Branch'           // From IF stage, for branch calculations
+  ],
+  duration: 800,
   simultaneousFlows: true
 };
 

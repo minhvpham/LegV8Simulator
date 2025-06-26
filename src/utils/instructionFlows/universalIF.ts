@@ -39,21 +39,21 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       results: [
         {
           id: 'D_Instruction',
-          dataValue: 'Test',
+          dataValue: 'PC_ADDRESS', // Will be resolved to current PC in hex
           dataType: 'pc_value',
           targetComponent: 'InsMem',
           wirePath: PC_TO_INSMEM_PATH, // Wire path object - animation system calls getPathPoints()
         },
         {
-          id: 'D_PC_Plus_4',
-          dataValue: 'Test',
+          id: 'D_PC_Input',
+          dataValue: 'PC_ADDRESS', // ALUPC receives current PC, calculates PC+4 internally
           dataType: 'pc_value',
           targetComponent: 'ALUPC',
           wirePath: PC_TO_ALUPC_PATH, // Wire path object - animation system calls getPathPoints()
         },
         {
           id: 'D_PC_Branch',
-          dataValue: 'Test',
+          dataValue: 'PC_ADDRESS', // Will be resolved to current PC in hex
           dataType: 'pc_value',
           targetComponent: 'ALUBranch',
           wirePath: PC_TO_ALUBRANCH_PATH, // Wire path object - animation system calls getPathPoints()
@@ -61,7 +61,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       ]
     }
   ],
-  finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // Keep original final circle names for next stage compatibility
+  finalCircles: ['D_PC_Input', 'D_Instruction', 'D_PC_Branch'], // Updated to reflect actual data flow
   duration: 800,
   simultaneousFlows: true
 };

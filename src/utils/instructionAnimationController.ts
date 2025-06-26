@@ -20,6 +20,8 @@ export class InstructionAnimationController {
   
   // CPU State integration
   private cpuState: CPUState | null = null;
+  // Machine code breakdown from store
+  private machineCodeBreakdown: any = null;
   // Multi-circle animation support
   private circleManager: DataCircleManager;
   private animationSequencer: AnimationSequencer;
@@ -89,6 +91,19 @@ export class InstructionAnimationController {
   }
 
   /**
+   * Set machine code breakdown for proper field extraction
+   */
+  setMachineCodeBreakdown(machineCode: any): void {
+    this.machineCodeBreakdown = machineCode;
+    console.log('🔧 Machine code breakdown set:', machineCode);
+    if (machineCode?.machineCode32Bit) {
+      console.log(`🔧 32-bit machine code: ${machineCode.machineCode32Bit}`);
+      console.log(`🔧 Bit verification - [9-5]: ${machineCode.machineCode32Bit.substring(22, 27)}`);
+      console.log(`🔧 Bit verification - [20-16]: ${machineCode.machineCode32Bit.substring(11, 16)}`);
+    }
+  }
+
+  /**
    * Set animation speed multiplier
    */
   setAnimationSpeed(speed: number): void {
@@ -154,10 +169,10 @@ export class InstructionAnimationController {
     
     // Get actual PC value from CPU state
     let pcValue: string | number = 'PC_VALUE';
-    if (this.cpuState) {
-      const { value } = CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' });
-      pcValue = value;
-    }
+    // if (this.cpuState) {
+    //   const { value } = CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' });
+    //   pcValue = value;
+    // }
     
     const initialCircle = this.circleManager.createCircle(
       pcValue, // Now uses actual PC value from CPU state
@@ -434,11 +449,109 @@ export class InstructionAnimationController {
     const newCircles: DataCircle[] = [];
     const animations: CircleAnimation[] = [];
     
+    // Track how many circles are going to each component for proper positioning
+    const componentCircleCounts: Map<string, number> = new Map();
+    
     for (let i = 0; i < operation.results.length; i++) {
       const splitResult = operation.results[i];
       
-      // Resolve actual data value based on type and CPU state
+      // Debug logging for split operation order
+      console.log(`🔍 DEBUG Split ${i}: ID=${splitResult.id}, dataValue=${splitResult.dataValue}, targetComponent=${splitResult.targetComponent}`);
+      
+      // Resolve actual data value based on placeholder and CPU state
       let actualValue: string | number = splitResult.dataValue;
+      
+      if (this.cpuState && typeof splitResult.dataValue === 'string') {
+        const placeholder = splitResult.dataValue.toUpperCase();
+        
+        switch (placeholder) {
+          case 'PC_ADDRESS':
+            // Current PC value in hex format
+            const currentPC = this.cpuState.pc;
+            actualValue = `0x${currentPC.toString(16).toUpperCase().padStart(8, '0')}`;
+            console.log(`🎯 Resolved PC_ADDRESS to: ${actualValue}`);
+            break;
+            
+          case 'PC_PLUS_4':
+            // PC+4 value in hex format
+            const pcPlus4 = this.cpuState.pc + 4;
+            actualValue = `0x${pcPlus4.toString(16).toUpperCase().padStart(8, '0')}`;
+            console.log(`🎯 Resolved PC_PLUS_4 to: ${actualValue}`);
+            break;
+            
+          case 'INSTRUCTION_BINARY':
+            // Machine code in binary format
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              actualValue = this.machineCodeBreakdown.machineCode32Bit;
+              console.log(`🎯 Resolved INSTRUCTION_BINARY to: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_HEX':
+            // Machine code in hex format
+            if (this.machineCodeBreakdown?.hexMachineCode) {
+              actualValue = `0x${this.machineCodeBreakdown.hexMachineCode}`;
+              console.log(`🎯 Resolved INSTRUCTION_HEX to: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_31_21':
+            // Opcode field [31-21] - 11 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const opcodeBits = binaryString.substring(0, 11); // Extract bits 31-21
+              actualValue = opcodeBits;
+              console.log(`🎯 Resolved INSTRUCTION_FIELD_31_21 to: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_20_16':
+            // Rm field [20-16] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rmBits = binaryString.substring(11, 16); // Extract bits 20-16
+              actualValue = rmBits;
+              console.log(`🎯 Resolved INSTRUCTION_FIELD_20_16 to: ${actualValue}`);
+              console.log(`🎯 For split result ID: ${splitResult.id}, setting value: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_9_5':
+            // Rn field [9-5] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rnBits = binaryString.substring(22, 27); // Extract bits 9-5 (positions 22-26)
+              actualValue = rnBits;
+              console.log(`🎯 Resolved INSTRUCTION_FIELD_9_5 to: ${actualValue} (from machine code: ${binaryString})`);
+              console.log(`🎯 Extracted from positions 22-26: ${binaryString.substring(22, 27)}`);
+              console.log(`🎯 For split result ID: ${splitResult.id}, setting value: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_4_0':
+            // Rd field [4-0] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
+              actualValue = rdBits;
+              console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_31_0':
+            // Full instruction - all 32 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              actualValue = this.machineCodeBreakdown.machineCode32Bit;
+              console.log(`🎯 Resolved INSTRUCTION_FIELD_31_0 to: ${actualValue}`);
+            }
+            break;
+            
+          default:
+            // Keep original value if no placeholder match
+            console.log(`📋 Using original value for ${placeholder}: ${actualValue}`);
+            break;
+        }
+      }
       
       const newCircle = this.circleManager.createCircle(
         actualValue, // Now uses resolved CPU data
@@ -451,10 +564,24 @@ export class InstructionAnimationController {
       // Use the ID from SplitResult
       newCircle.id = splitResult.id;
       
+      // Debug logging for D_Rn_Idx specifically
+      if (splitResult.id === 'D_Rn_Idx') {
+        console.log(`🔍 DEBUG D_Rn_Idx: splitResult.dataValue = ${splitResult.dataValue}`);
+        console.log(`🔍 DEBUG D_Rn_Idx: actualValue = ${actualValue}`);
+        console.log(`🔍 DEBUG D_Rn_Idx: newCircle.dataValue = ${newCircle.dataValue}`);
+        console.log(`🔍 DEBUG D_Rn_Idx: newCircle.id = ${newCircle.id}`);
+      }
+      
       newCircles.push(newCircle);
       this.activeCircles.set(newCircle.id, newCircle);
-      this.callbacks.onCircleCreate(newCircle);      // Create move animation for each new circle
-      const targetPosition = this.getPositionWithOffset(splitResult.targetComponent, i);
+      this.callbacks.onCircleCreate(newCircle);
+      
+      // Track component-specific circle count for proper positioning
+      const currentCount = componentCircleCounts.get(splitResult.targetComponent) || 0;
+      componentCircleCounts.set(splitResult.targetComponent, currentCount + 1);
+      
+      // Create move animation for each new circle
+      const targetPosition = this.getPositionWithOffset(splitResult.targetComponent, currentCount);
       
       // Resolve wire path - check if it's a wire path object or coordinate array
       let wirePath: Point[];
@@ -476,7 +603,11 @@ export class InstructionAnimationController {
         wirePath = this.getWirePathBetweenComponents(sourceComponent, splitResult.targetComponent);
       }
 
-      console.log(`Creating animation for circle ${newCircle.id} to component ${splitResult.targetComponent}`);      animations.push({
+      console.log(`Creating animation for circle ${newCircle.id} to component ${splitResult.targetComponent}`);
+      console.log(`🎯 Circle ${newCircle.id} positioning: targetPosition = {x: ${targetPosition.x}, y: ${targetPosition.y}}, componentIndex = ${currentCount}`);
+      if (splitResult.id === 'D_Rn_Idx' || splitResult.id === 'D_Rm_Idx' || splitResult.id === 'D_RegRead2') {
+        console.log(`🔍 POSITION DEBUG ${splitResult.id}: value=${newCircle.dataValue}, target=${splitResult.targetComponent}, componentIndex=${currentCount}, pos={x:${targetPosition.x}, y:${targetPosition.y}}`);
+      }      animations.push({
         circleId: newCircle.id,
         operation: 'move',
         duration: 800,
@@ -769,7 +900,90 @@ export class InstructionAnimationController {
       newDataType = result.dataType as any;
       newId = result.id;
       
-      // Resolve actual data value if using CPU state
+      // Resolve actual data value if using CPU state and placeholder
+      if (this.cpuState && typeof result.dataValue === 'string') {
+        const placeholder = result.dataValue.toUpperCase();
+        
+        switch (placeholder) {
+          case 'INSTRUCTION_BINARY':
+            // Machine code in binary format
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              newValue = this.machineCodeBreakdown.machineCode32Bit;
+              console.log(`🎯 Transform resolved INSTRUCTION_BINARY to: ${newValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_31_21':
+            // Opcode field [31-21] - 11 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const opcodeBits = binaryString.substring(0, 11); // Extract bits 31-21
+              newValue = opcodeBits;
+              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_31_21 to: ${newValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_20_16':
+            // Rm field [20-16] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rmBits = binaryString.substring(11, 16); // Extract bits 20-16
+              newValue = rmBits;
+              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_20_16 to: ${newValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_9_5':
+            // Rn field [9-5] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rnBits = binaryString.substring(22, 27); // Extract bits 9-5 (positions 22-26)
+              newValue = rnBits;
+              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_9_5 to: ${newValue} (from machine code: ${binaryString})`);
+              console.log(`🎯 Transform extracted from positions 22-26: ${binaryString.substring(22, 27)}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_4_0':
+            // Rd field [4-0] - 5 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+              const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
+              newValue = rdBits;
+              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_4_0 to: ${newValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_FIELD_31_0':
+            // Full instruction - all 32 bits in pure binary
+            if (this.machineCodeBreakdown?.machineCode32Bit) {
+              newValue = this.machineCodeBreakdown.machineCode32Bit;
+              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_31_0 to: ${newValue}`);
+            }
+            break;
+            
+          case 'REGISTER_VALUE_FROM_INDEX':
+            // Convert register index to register value from CPU state
+            if (this.cpuState && sourceCircle) {
+              // Parse the register index from the source circle's binary data
+              const registerIndex = parseInt(sourceCircle.dataValue as string, 2);
+              if (!isNaN(registerIndex) && registerIndex >= 0 && registerIndex <= 31) {
+                // XZR (register 31) always returns 0, others read from CPU state
+                const registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
+                newValue = `0x${registerValue.toString(16).toUpperCase().padStart(8, '0')}`;
+                console.log(`🎯 Transform resolved REGISTER_VALUE_FROM_INDEX: R${registerIndex} = ${newValue} (binary index: ${sourceCircle.dataValue})`);
+              } else {
+                console.error(`🔴 Invalid register index for REGISTER_VALUE_FROM_INDEX: ${sourceCircle.dataValue}`);
+                newValue = '0x00000000';
+              }
+            }
+            break;
+            
+          default:
+            // Keep the resolved value from result.dataValue
+            break;
+        }
+      }
     }
       console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
 
@@ -1639,7 +1853,26 @@ export class InstructionAnimationController {
       return { x: 100 + circleIndex * 20, y: 100 + circleIndex * 20 };
     }
     
-    // Apply small offset to avoid overlapping circles
+    // Special handling for RegFile to avoid overlapping D_Rn_Idx and D_RegRead2
+    if (componentName === 'RegFile') {
+      // Use larger offset for RegFile to clearly separate Read1 and Read2 ports
+      const offsetDistance = 30; // Increased from 15 to 30 pixels
+      const angle = (circleIndex * Math.PI * 2) / 4; // Use 4 positions instead of 6
+      
+      // For RegFile specifically, use vertical offset for read ports
+      if (circleIndex === 0) {
+        // First circle (D_Rn_Idx) - Read register 1 - top position
+        return { x: basePosition.x - 20, y: basePosition.y - 25 };
+      } else if (circleIndex === 1) {
+        // Second circle (D_RegRead2) - Read register 2 - middle position  
+        return { x: basePosition.x - 20, y: basePosition.y + 10 };
+      } else if (circleIndex === 2) {
+        // Third circle (D_Write_Addr_Idx) - Write register - bottom position
+        return { x: basePosition.x - 20, y: basePosition.y + 45 };
+      }
+    }
+    
+    // Apply offset for other components
     const offsetDistance = 15; // pixels
     const angle = (circleIndex * Math.PI * 2) / 6; // Distribute around circle
     
@@ -1706,15 +1939,18 @@ export class InstructionAnimationController {
     // Initialize with first circle (PC value) at PC component with real CPU data
     const pcPosition = this.getComponentPosition('PC');
     
-    // Get actual PC value from CPU state
-    let pcValue: string | number = 'PC_VALUE';
+    // Get actual PC value from CPU state and format as hex
+    let pcValue: string = '0x00400000'; // Default fallback
     if (this.cpuState) {
-      const { value } = CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' });
-      pcValue = value;
+      const currentPC = this.cpuState.pc;
+      pcValue = `0x${currentPC.toString(16).toUpperCase().padStart(8, '0')}`;
+      console.log(`📍 Initializing Phase 1 with actual PC value: ${pcValue}`);
+    } else {
+      console.warn('⚠️ No CPU state available, using default PC value');
     }
     
     const initialCircle = this.circleManager.createCircle(
-      pcValue,
+      pcValue, // Real PC value in hex format
       'pc_value',
       pcPosition,
       'PHASE_INITIAL'
@@ -1735,6 +1971,8 @@ export class InstructionAnimationController {
     
     await this.animationSequencer.executeSequential([fadeInAnimation]);
     this.callbacks.onCircleCreate(initialCircle);
+    
+    console.log(`✅ Phase 1 initialized with PC circle: ${pcValue} at component PC`);
   }
 
   /**

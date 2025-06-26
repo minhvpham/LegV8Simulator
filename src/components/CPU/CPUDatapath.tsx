@@ -37,7 +37,8 @@ const CPUDatapath: React.FC = () => {
     animationPath, 
     highlightedComponents, 
     setAnimationPath, 
-    setHighlightedComponents 
+    setHighlightedComponents,
+    currentMachineCode
   } = useSimulatorStore();  
 
   // Animation state
@@ -87,10 +88,20 @@ const CPUDatapath: React.FC = () => {
       // Set current CPU state for data integration
       instructionAnimationController.setCPUState(cpu);
       
+      // Set machine code breakdown for proper field extraction
+      if (currentMachineCode) {
+        instructionAnimationController.setMachineCodeBreakdown(currentMachineCode);
+      }
+      
       // Execute the specific phase using the public method
       await instructionAnimationController.executePhase(phaseIndex, WORKFLOW);
       
       console.log(`Completed phase ${phaseIndex + 1}: ${stage.stageName}`);
+      
+      // Increment to next phase after successful completion
+      const nextPhase = (phaseIndex + 1) % WORKFLOW.length;
+      setCurrentPhase(nextPhase);
+      
     } catch (error) {
       console.error('Phase execution error:', error);
     } finally {
@@ -103,13 +114,7 @@ const CPUDatapath: React.FC = () => {
 
   // Simple next phase function
   const goToNextPhase = () => {
-    if (currentPhase < WORKFLOW.length - 1) {
-      executePhase(currentPhase + 1);
-    } else {
-      // Completed all phases, restart from phase 0
-      setCurrentPhase(0);
-      executePhase(0);
-    }
+    executePhase(currentPhase);
   };
 
   // Reset phase animation state
@@ -396,6 +401,11 @@ const CPUDatapath: React.FC = () => {
         // Set the CPU state in the animation controller for real data integration
         instructionAnimationController.setCPUState(cpu);
         
+        // Set machine code breakdown for proper field extraction
+        if (currentMachineCode) {
+          instructionAnimationController.setMachineCodeBreakdown(currentMachineCode);
+        }
+        
         // Check if multi-circle animation is supported for this instruction
         const supportsMultiCircle = instructionAnimationController.supportsMultiCircleAnimation(instructionType);
         console.log('Multi-circle animation supported:', supportsMultiCircle);
@@ -409,7 +419,13 @@ const CPUDatapath: React.FC = () => {
           
           // Set current CPU state for data integration
           instructionAnimationController.setCPUState(cpu);
-            // Execute multi-circle animation
+          
+          // Set machine code breakdown for proper field extraction
+          if (currentMachineCode) {
+            instructionAnimationController.setMachineCodeBreakdown(currentMachineCode);
+          }
+          
+          // Execute multi-circle animation
           await instructionAnimationController.executeInstruction(instructionType);
         } else {
           // Fall back to traditional single-circle animation
@@ -430,6 +446,11 @@ const CPUDatapath: React.FC = () => {
           
           // Set current CPU state for data integration  
           instructionAnimationController.setCPUState(cpu);
+          
+          // Set machine code breakdown for proper field extraction
+          if (currentMachineCode) {
+            instructionAnimationController.setMachineCodeBreakdown(currentMachineCode);
+          }
           
           console.log('Animation setup complete, starting traditional animation...');
             // Execute the traditional animation

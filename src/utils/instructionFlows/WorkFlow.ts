@@ -183,7 +183,7 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       targetComponent: 'RegFile', 
       results: [{
         id: 'D_Rn_Val',
-        dataValue: 'test',
+        dataValue: 'REGISTER_VALUE_FROM_INDEX',
         dataType: 'register_data',
         targetComponent: 'RegFile'
       }]
