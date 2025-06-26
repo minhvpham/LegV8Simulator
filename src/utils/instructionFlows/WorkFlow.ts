@@ -61,163 +61,263 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       sourceCircleIds: ['D_Opcode'],
       targetComponent: 'Control',
       preserveSource: false, // Keep D_Opcode for later stages
-      splitResults: [         
+      results: [         
         {
-          newValue: 'C_RegWrite',
-          newType: 'control_signal',
+          id: 'C_RegWrite',
+          dataValue: 'test1',
+          dataType: 'control_signal',
           targetComponent: 'RegFile',
-          wirePath: CONTROL_REGWRITE_SIGNAL_PATH,
-          location: 'Control->RegFile'
+          wirePath: CONTROL_REGWRITE_SIGNAL_PATH
         },
         {
-          newValue: 'C_Reg2Loc',
-          newType: 'control_signal',
+          id: 'C_Reg2Loc',
+          dataValue: 'test1',
+          dataType: 'control_signal',
           targetComponent: 'MuxReg2Loc',
-          wirePath: CONTROL_REG2LOC_SIGNAL_PATH,
-          location: 'Control->MuxReg2Loc'
+          wirePath: CONTROL_REG2LOC_SIGNAL_PATH
         },
         {
-          newValue: 'C_ALUSrc',
-          newType: 'control_signal',
+          id: 'C_ALUSrc',
+          dataValue: 'test1',
+          dataType: 'control_signal',
           targetComponent: 'MuxReadReg',
-          wirePath: CONTROL_ALUSRC_SIGNAL_PATH,
-          location: 'Control->MuxReadReg'
+          wirePath: CONTROL_ALUSRC_SIGNAL_PATH
         },
         {
-          newValue: 'C_ALUOp',
-          newType: 'control_signal',
+          id: 'C_ALUOp',
+          dataValue: 'test1',
+          dataType: 'control_signal',
           targetComponent: 'ALUControl',
-          wirePath: CONTROL_ALUOP_SIGNAL_PATH,
-          location: 'Control->ALUControl'
+          wirePath: CONTROL_ALUOP_SIGNAL_PATH
         },
         {
-          newValue: 'C_MemRead',
-          newType: 'control_signal',
+          id: 'C_MemRead',
+          dataValue: 'test1',
+          dataType: 'control_signal',
           targetComponent: 'DataMem',
-          wirePath: CONTROL_MEMREAD_SIGNAL_PATH,
-          location: 'Control->DataMem'
+          wirePath: CONTROL_MEMREAD_SIGNAL_PATH
         },
         {
-          newValue: 'C_MemWrite',
-          newType: 'control_signal',
+          id: 'C_MemWrite',
+          dataValue: 'test',
+          dataType: 'control_signal',
           targetComponent: 'DataMem',
-          wirePath: CONTROL_MEMWRITE_SIGNAL_PATH,
-          location: 'Control->DataMem'
+          wirePath: CONTROL_MEMWRITE_SIGNAL_PATH
         },
         {
-          newValue: 'C_MemToReg',
-          newType: 'control_signal',
+          id: 'C_MemToReg',
+          dataValue: 'test',
+          dataType: 'control_signal',
           targetComponent: 'MuxReadMem',
-          wirePath: CONTROL_MEMTOREG_SIGNAL_PATH,
-          location: 'Control->MuxReadMem'
+          wirePath: CONTROL_MEMTOREG_SIGNAL_PATH
         },
         {
-          newValue: 'C_UncondBranch',
-          newType: 'control_signal',
+          id: 'C_UncondBranch',
+          dataValue: 'test',
+          dataType: 'control_signal',
           targetComponent: 'BranchOR',
-          wirePath: CONTROL_UNCONDITIONAL_BRANCH_SIGNAL_PATH,
-          location: 'Control->BranchOR'
+          wirePath: CONTROL_UNCONDITIONAL_BRANCH_SIGNAL_PATH
         },
         {
-          newValue: 'C_ZeroBranch',
-          newType: 'control_signal',
+          id: 'C_ZeroBranch',
+          dataValue: 'test',
+          dataType: 'control_signal',
           targetComponent: 'ZeroAND',
-          wirePath: CONTROL_ZERO_BRANCH_SIGNAL_PATH,
-          location: 'Control->ZeroAND'
+          wirePath: CONTROL_ZERO_BRANCH_SIGNAL_PATH
         }
       ]
     },
     // 2. Main ALU path: Read Rn, move immediate, select immediate with MUX.
-    {type: 'merge', timing: 50, sourceCircleIds: ['D_Rm_Idx', 'C_Reg2Loc', 'D_Rt_Idx_Mux'], targetComponent: 'MuxReg2Loc', resultData: 'D_Rm_Val'},
+    {
+      type: 'merge', 
+      timing: 50, 
+      sourceCircleIds: ['D_Rm_Idx', 'C_Reg2Loc', 'D_Rt_Idx_Mux'], 
+      targetComponent: 'MuxReg2Loc',
+      results: [{
+        id: 'D_Rm_Val',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'MuxReg2Loc'
+      }]
+    },
     { type: 'move', timing: 300, sourceCircleIds: ['D_Rm_Val'], targetComponent: 'RegFile', wirePath: MUXREG2LOC_TO_REGFILE_READ2_PATH },
-    { type:'transform', timing: 380, sourceCircleIds: ['D_Rm_Val'], targetComponent: 'RegFile', resultData: 'D_Rm_Val_1'},
+    { 
+      type:'transform', 
+      timing: 380, 
+      sourceCircleIds: ['D_Rm_Val'], 
+      targetComponent: 'RegFile', 
+      results: [{
+        id: 'D_Rm_Val_1',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'RegFile'
+      }]
+    },
     {
         type: 'split',
         timing: 500,
         sourceCircleIds: ['D_Rm_Val_1'],
         targetComponent: 'RegFile',
         preserveSource: false, // Don't keep D_Rm_Val as cycle is complete
-        splitResults: [
+        results: [
             {
-                newValue: 'D_Rm_Val_Mux',
-                newType: 'data_value',
+                id: 'D_Rm_Val_Mux',
+                dataValue: 'test',
+                dataType: 'register_data',
                 targetComponent: 'MuxReadReg',
-                wirePath: REGFILE_TO_MUXREADREG_PATH,
-                location: 'RegFile->MuxReadReg'
+                wirePath: REGFILE_TO_MUXREADREG_PATH
             },
             {
-                newValue: 'D_DataMem_Addr',
-                newType: 'data_value',
+                id: 'D_DataMem_Addr',
+                dataValue: 'test',
+                dataType: 'register_data',
                 targetComponent: 'DataMem',
-                wirePath: REGFILE_TO_DATAMEM_PATH,
-                location: 'RegFile->DataMem'
+                wirePath: REGFILE_TO_DATAMEM_PATH
             }
         ]
     },
-    { type: 'transform', timing: 600, sourceCircleIds: ['D_Rn_Idx'], targetComponent: 'RegFile', resultData: 'D_Rn_Val' },
+    { 
+      type: 'transform', 
+      timing: 600, 
+      sourceCircleIds: ['D_Rn_Idx'], 
+      targetComponent: 'RegFile', 
+      results: [{
+        id: 'D_Rn_Val',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'RegFile'
+      }]
+    },
     { type: 'move', timing: 700, sourceCircleIds: ['D_Rn_Val'], targetComponent: 'ALUMain', wirePath: REGFILE_TO_ALUMAIN_PATH },
-    { type: 'transform', timing: 800, sourceCircleIds: ['D_Imm'], targetComponent: 'SignExtend', resultData: 'D_SignExt_1'}, 
-    { type: 'split',
+    { 
+      type: 'transform', 
+      timing: 800, 
+      sourceCircleIds: ['D_Imm'], 
+      targetComponent: 'SignExtend', 
+      results: [{
+        id: 'D_SignExt_1',
+        dataValue: 'test',
+        dataType: 'immediate',
+        targetComponent: 'SignExtend'
+      }]
+    }, 
+    { 
+      type: 'split',
       timing: 900,
       sourceCircleIds: ['D_SignExt_1'],
       targetComponent: 'SignExtend',
       preserveSource: false, // Don't keep D_SignExt_1 as cycle is complete
-      splitResults: [
+      results: [
         {
-          newValue: 'D_SignExt_Imm',
-          newType: 'data_value',
+          id: 'D_SignExt_Imm',
+          dataValue: 'test',
+          dataType: 'immediate',
           targetComponent: 'MuxReadReg',
-          wirePath: SIGNEXTEND_TO_MUXREADREG_PATH,
-          location: 'SignExtend->MuxReadReg'
+          wirePath: SIGNEXTEND_TO_MUXREADREG_PATH
         },
         {
-          newValue: 'D_Branch_Imm',
-          newType: 'data_value',
+          id: 'D_Branch_Imm',
+          dataValue: 'test',
+          dataType: 'immediate',
           targetComponent: 'ShiftLeft2',
-          wirePath: SIGNEXTEND_TO_SHIFTLEFT2_PATH,
-          location: 'SignExtend->ShiftLeft2'
+          wirePath: SIGNEXTEND_TO_SHIFTLEFT2_PATH
         }
       ]
     },
     // Select the immediate value for ALU operation.
-    { type: 'merge', timing: 1000, sourceCircleIds: ['D_Rm_Val_Mux', 'D_SignExt_Imm', 'C_ALUSrc'], targetComponent: 'MuxReadReg', resultData: 'D_Mux_Out' },
+    { 
+      type: 'merge', 
+      timing: 1000, 
+      sourceCircleIds: ['D_Rm_Val_Mux', 'D_SignExt_Imm', 'C_ALUSrc'], 
+      targetComponent: 'MuxReadReg', 
+      results: [{
+        id: 'D_Mux_Out',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'MuxReadReg'
+      }]
+    },
     // { type: 'transform', timing: 400, sourceCircleIds: ['D_SignExt_Imm'], targetComponent: 'MuxReadReg', resultData: 'D_Mux_Out' },
     { type: 'move', timing: 1100, sourceCircleIds: ['D_Mux_Out'], targetComponent: 'ALUMain', wirePath: MUXREADREG_TO_ALUMAIN_PATH },
     // 3. ALU Control signal generation.
-    { type: 'merge', timing: 1200, sourceCircleIds: ['C_ALUOp', 'D_Funct'], targetComponent: 'ALUControl', resultData: 'C_ALU_Func_Add' },
+    { 
+      type: 'merge', 
+      timing: 1200, 
+      sourceCircleIds: ['C_ALUOp', 'D_Funct'], 
+      targetComponent: 'ALUControl', 
+      results: [{
+        id: 'C_ALU_Func_Add',
+        dataValue: 'test',
+        dataType: 'control_signal',
+        targetComponent: 'ALUControl'
+      }]
+    },
     { type: 'move', timing: 1300, sourceCircleIds: ['C_ALU_Func_Add'], targetComponent: 'ALUMain', wirePath: ALUCONTROL_TO_ALUMAIN_SIGNAL_PATH },
     // 4. Main ALU calculation.
-    { type: 'merge', timing: 1400, sourceCircleIds: ['D_Rn_Val', 'D_Mux_Out', 'C_ALU_Func_Add'], targetComponent: 'ALUMain', resultData: 'D_ALU_Result' },
-    { type: 'transform', timing: 1500, sourceCircleIds: ['D_Branch_Imm'], targetComponent: 'ShiftLeft2', resultData: 'D_Shift_Result' },
+    { 
+      type: 'merge', 
+      timing: 1400, 
+      sourceCircleIds: ['D_Rn_Val', 'D_Mux_Out', 'C_ALU_Func_Add'], 
+      targetComponent: 'ALUMain', 
+      results: [{
+        id: 'D_ALU_Result',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'ALUMain'
+      }]
+    },
+    { 
+      type: 'transform', 
+      timing: 1500, 
+      sourceCircleIds: ['D_Branch_Imm'], 
+      targetComponent: 'ShiftLeft2', 
+      results: [{
+        id: 'D_Shift_Result',
+        dataValue: 'test',
+        dataType: 'immediate',
+        targetComponent: 'ShiftLeft2'
+      }]
+    },
     { type: 'move', timing: 1600, sourceCircleIds: ['D_Shift_Result'], targetComponent: 'ALUBranch', wirePath: SHIFTLEFT2_TO_ALUBRANCH_PATH },
-    { type: 'merge', timing: 1700, sourceCircleIds: ['D_PC_Branch', 'D_Shift_Result'], targetComponent: 'ALUBranch', resultData: 'D_Branch_Addr_Result' },  
+    { 
+      type: 'merge', 
+      timing: 1700, 
+      sourceCircleIds: ['D_PC_Branch', 'D_Shift_Result'], 
+      targetComponent: 'ALUBranch', 
+      results: [{
+        id: 'D_Branch_Addr_Result',
+        dataValue: 'test',
+        dataType: 'address',
+        targetComponent: 'ALUBranch'
+      }]
+    },  
     {
         type: 'split',
         timing: 1800,
         sourceCircleIds: ['D_ALU_Result'],
         targetComponent: "ALUMain",
         preserveSource: false, // Don't keep D_ALU_Result as cycle is complete
-        splitResults: [
+        results: [
           { 
-            newValue: 'D_ALU_Result_Mem', 
-            newType: 'data_value', 
+            id: 'D_ALU_Result_Mem', 
+            dataValue: 'test', 
+            dataType: 'register_data', 
             targetComponent: 'DataMem', 
-            wirePath: ALUMAIN_TO_DATAMEM_PATH,
-            location: 'ALUMain->DataMem'
+            wirePath: ALUMAIN_TO_DATAMEM_PATH
           },
           { 
-            newValue: 'D_ALU_Result_Mux', 
-            newType: 'data_value', 
+            id: 'D_ALU_Result_Mux', 
+            dataValue: 'test', 
+            dataType: 'register_data', 
             targetComponent: 'MuxReadMem', 
-            wirePath: ALUMAIN_TO_MUXREADMEM_PATH,
-            location: 'ALUMain->MuxReadMem'
+            wirePath: ALUMAIN_TO_MUXREADMEM_PATH
           },
           { 
-            newValue: 'D_ALU_Result_Zero', 
-            newType: 'data_value', 
+            id: 'D_ALU_Result_Zero', 
+            dataValue: 'test', 
+            dataType: 'register_data', 
             targetComponent: 'ZeroAND', 
-            wirePath: ALUMAIN_TO_ZEROAND_SIGNAL_PATH,
-            location: 'ALUMain->ZeroAND'
+            wirePath: ALUMAIN_TO_ZEROAND_SIGNAL_PATH
           }
         ]
     },
@@ -263,9 +363,37 @@ const I_FORMAT_MEM_STAGE: StageDataFlow = {
     'C_ZeroBranch'
   ],
   operations: [
-    { type: 'transform', timing: 0, sourceCircleIds: ['D_DataMem_Addr'], targetComponent: 'DataMem', resultData: 'D_DataMem_Addr_1', preserveSource: true },
-    { type: 'merge', timing: 100, sourceCircleIds: ['D_DataMem_Addr_1', 'C_MemWrite', 'D_ALU_Result_Mem'], targetComponent: 'DataMem', resultData: null},
-    { type: 'merge', timing: 200, sourceCircleIds: ['D_DataMem_Addr', 'C_MemRead'], targetComponent: 'DataMem', resultData: 'D_DataMem_read'},
+    { 
+      type: 'transform', 
+      timing: 0, 
+      sourceCircleIds: ['D_DataMem_Addr'], 
+      targetComponent: 'DataMem', 
+      preserveSource: true,
+      results: [{
+        id: 'D_DataMem_Addr_1',
+        dataValue: 'test',
+        dataType: 'address',
+        targetComponent: 'DataMem'
+      }]
+    },
+    { 
+      type: 'merge', 
+      timing: 100, 
+      sourceCircleIds: ['D_DataMem_Addr_1', 'C_MemWrite', 'D_ALU_Result_Mem'], 
+      targetComponent: 'DataMem'
+    },
+    { 
+      type: 'merge', 
+      timing: 200, 
+      sourceCircleIds: ['D_DataMem_Addr', 'C_MemRead'], 
+      targetComponent: 'DataMem', 
+      results: [{
+        id: 'D_DataMem_read',
+        dataValue: 'test',
+        dataType: 'memory_data',
+        targetComponent: 'DataMem'
+      }]
+    },
     { type: 'move', timing: 300, sourceCircleIds: ['D_DataMem_read'], targetComponent: 'MuxReadMem', wirePath: DATAMEM_TO_MUXREADMEM_PATH }
   ],
   finalCircles: [
@@ -302,10 +430,37 @@ const I_FORMAT_WB_STAGE: StageDataFlow = {
     'C_UncondBranch',
     'C_ZeroBranch'
   ],  operations: [   
-    { type: 'merge', timing: 200, sourceCircleIds: ['D_DataMem_read', 'C_MemToReg', 'D_ALU_Result_Mux'], targetComponent: 'MuxReadMem', resultData: 'D_RegFile_Write' },
+    { 
+      type: 'merge', 
+      timing: 200, 
+      sourceCircleIds: ['D_DataMem_read', 'C_MemToReg', 'D_ALU_Result_Mux'], 
+      targetComponent: 'MuxReadMem', 
+      results: [{
+        id: 'D_RegFile_Write',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'MuxReadMem'
+      }]
+    },
     { type: 'move', timing: 300, sourceCircleIds: ['D_RegFile_Write'], targetComponent: 'RegFile', wirePath: MUXREADMEM_TO_REGFILE_PATH },
-    { type: 'merge', timing: 600, sourceCircleIds: ['D_Write_Addr_Idx', 'C_RegWrite', 'D_RegFile_Write'], targetComponent: 'RegFile', resultData: 'D_RegFile_Write_Addr' },
-    { type: 'transform', timing: 700, sourceCircleIds: ['D_RegFile_Write_Addr'], targetComponent: 'RegFile', resultData: null }
+    { 
+      type: 'merge', 
+      timing: 600, 
+      sourceCircleIds: ['D_Write_Addr_Idx', 'C_RegWrite', 'D_RegFile_Write'], 
+      targetComponent: 'RegFile', 
+      results: [{
+        id: 'D_RegFile_Write_Addr',
+        dataValue: 'test',
+        dataType: 'register_data',
+        targetComponent: 'RegFile'
+      }]
+    },
+    { 
+      type: 'transform', 
+      timing: 700, 
+      sourceCircleIds: ['D_RegFile_Write_Addr'], 
+      targetComponent: 'RegFile'
+    }
   ],
   finalCircles:  [
     'D_ALU_Result_Zero',
@@ -332,17 +487,55 @@ const PC_UPDATE_STAGE: StageDataFlow = {
     'C_ZeroBranch'
   ],
   operations: [  
-    { type: 'merge', timing:0, sourceCircleIds: ['D_ALU_Result_Zero', 'C_ZeroBranch'], targetComponent: 'ZeroAND', resultData: 'D_Branch_0' },
+    { 
+      type: 'merge', 
+      timing: 0, 
+      sourceCircleIds: ['D_ALU_Result_Zero', 'C_ZeroBranch'], 
+      targetComponent: 'ZeroAND', 
+      results: [{
+        id: 'D_Branch_0',
+        dataValue: 'test',
+        dataType: 'control_signal',
+        targetComponent: 'ZeroAND'
+      }]
+    },
     { type: 'move', timing: 50, sourceCircleIds: ['D_Branch_0'], targetComponent: 'BranchOR', wirePath: ZEROAND_TO_BRANCHOR_SIGNAL_PATH },
-    { type: 'merge', timing: 100, sourceCircleIds: ['C_UncondBranch', 'D_Branch_0'], targetComponent: 'BranchOR', resultData: 'D_Branch_1' },
+    { 
+      type: 'merge', 
+      timing: 100, 
+      sourceCircleIds: ['C_UncondBranch', 'D_Branch_0'], 
+      targetComponent: 'BranchOR', 
+      results: [{
+        id: 'D_Branch_1',
+        dataValue: 'test',
+        dataType: 'control_signal',
+        targetComponent: 'BranchOR'
+      }]
+    },
 
     { type: 'move', timing: 200, sourceCircleIds: ['D_Branch_1'], targetComponent: 'MuxPC', wirePath: BRANCHOR_TO_MUXPC_SIGNAL_PATH },
     { type: 'move', timing: 200, sourceCircleIds: ['D_PC_Plus_4'], targetComponent: 'MuxPC', wirePath: ALUPC_TO_MUXPC_PATH },
     { type: 'move', timing: 200, sourceCircleIds: ['D_Branch_Addr_Result'], targetComponent: 'MuxPC', wirePath: ALUBRANCH_TO_MUXPC_PATH },
 
-    { type: 'merge', timing: 500, sourceCircleIds: ['D_PC_Plus_4', 'D_Branch_Addr_Result', 'D_Branch_1'], targetComponent: 'MuxPC', resultData: 'D_Next_PC' },
+    { 
+      type: 'merge', 
+      timing: 500, 
+      sourceCircleIds: ['D_PC_Plus_4', 'D_Branch_Addr_Result', 'D_Branch_1'], 
+      targetComponent: 'MuxPC', 
+      results: [{
+        id: 'D_Next_PC',
+        dataValue: 'test',
+        dataType: 'pc_value',
+        targetComponent: 'MuxPC'
+      }]
+    },
     { type: 'move', timing: 600, sourceCircleIds: ['D_Next_PC'], targetComponent: 'PC', wirePath: MUXPC_TO_PC_PATH },
-    { type: 'transform', timing: 800, sourceCircleIds: ['D_Next_PC'], targetComponent: 'PC', resultData: null }
+    { 
+      type: 'transform', 
+      timing: 800, 
+      sourceCircleIds: ['D_Next_PC'], 
+      targetComponent: 'PC'
+    }
   ],
   finalCircles: [], // Instruction cycle is complete.
   duration: 1000,

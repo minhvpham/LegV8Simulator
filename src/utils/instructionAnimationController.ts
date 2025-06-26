@@ -406,19 +406,19 @@ export class InstructionAnimationController {
       
       await this.animationSequencer.executeSequential([fadeInAnimation]);
     }
-      if (!sourceCircle || !operation.splitResults) {
+      if (!sourceCircle || !operation.results) {
       console.error('🔴 SPLIT OPERATION FAILED!');
       if (!sourceCircle) {
         console.error('❌ No source circle found');
         console.error('🔍 Requested ID:', operation.sourceCircleIds[0] || 'NONE');
         console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
       }
-      if (!operation.splitResults) {
+      if (!operation.results) {
         console.error('❌ No split results defined in operation');
       }
       console.error('⚠️  Check flow definition and circle creation logic');
       return;
-    }    console.log(`🎯 DEBUG: Final selected source circle: ${sourceCircle?.id} for splitting into ${operation.splitResults?.length || 0} new circles`);
+    }    console.log(`🎯 DEBUG: Final selected source circle: ${sourceCircle?.id} for splitting into ${operation.results?.length || 0} new circles`);
     
     if (sourceCircle && operation.sourceCircleIds[0] !== sourceCircle.id) {
       console.error('🚨 BUG DETECTED! Requested circle:', operation.sourceCircleIds[0], 'but using circle:', sourceCircle.id);
@@ -426,7 +426,7 @@ export class InstructionAnimationController {
 
     // Highlight components for split operation
     const sourceComponent = this.getComponentNameFromPosition(sourceCircle.position);
-    const targetComponents = operation.splitResults.map(result => result.targetComponent);
+    const targetComponents = operation.results.map(result => result.targetComponent);
     const allComponents = [sourceComponent, ...targetComponents];
     this.highlightOperationComponents('split', allComponents);
 
@@ -434,25 +434,22 @@ export class InstructionAnimationController {
     const newCircles: DataCircle[] = [];
     const animations: CircleAnimation[] = [];
     
-    for (let i = 0; i < operation.splitResults.length; i++) {
-      const splitResult = operation.splitResults[i];
+    for (let i = 0; i < operation.results.length; i++) {
+      const splitResult = operation.results[i];
       
       // Resolve actual data value based on type and CPU state
-      let actualValue: string | number = splitResult.newValue;
-      if (this.cpuState) {
-        actualValue = this.resolveDataValue(splitResult.newValue, splitResult.newType, splitResult.targetComponent);
-      }
+      let actualValue: string | number = splitResult.dataValue;
       
       const newCircle = this.circleManager.createCircle(
         actualValue, // Now uses resolved CPU data
-        splitResult.newType as any,
+        splitResult.dataType as any,
         sourceCircle.position, // Start at source position
         stageName,
         sourceCircle.id // Parent ID
       );
       
-      // Give unique IDs to track split results
-      newCircle.id = `${splitResult.newValue.toLowerCase()}_${Date.now()}_${i}`;
+      // Use the ID from SplitResult
+      newCircle.id = splitResult.id;
       
       newCircles.push(newCircle);
       this.activeCircles.set(newCircle.id, newCircle);
@@ -629,21 +626,27 @@ export class InstructionAnimationController {
 
     // Execute convergence animations in parallel
     await this.animationSequencer.executeParallel(convergenceAnimations);    // Create merged circle with combined data
-    let resolvedData = operation.resultData || 'MERGED_DATA';
-    if (operation.resultData) {
-      resolvedData = this.resolveDataValue(operation.resultData, 'register_data', operation.targetComponent);
+    let resolvedData = 'MERGED_DATA';
+    let mergedId = 'MERGED_DATA';
+    let mergedDataType = 'register_data';
+    
+    if (operation.results && operation.results.length > 0) {
+      const result = operation.results[0]; // Take first result for merge
+      resolvedData = result.dataValue;
+      mergedId = result.id;
+      mergedDataType = result.dataType;
+      
+      // Resolve actual data value if using CPU state
     }
       const mergedCircle = this.circleManager.createCircle(
       resolvedData,
-      'register_data', // Default type, could be determined from operation
+      mergedDataType as any, // Default type, could be determined from operation
       targetPosition,
       stageName
     );
 
-    // Set the proper ID based on resultData if specified
-    if (operation.resultData) {
-      mergedCircle.id = operation.resultData;
-    }
+    // Set the proper ID based on results if specified
+    mergedCircle.id = mergedId;
 
     this.activeCircles.set(mergedCircle.id, mergedCircle);
     
@@ -755,30 +758,27 @@ export class InstructionAnimationController {
       console.error('🔴 TRANSFORM OPERATION FAILED - No source circle found!');
       console.error('⚠️  This should never happen - check circle creation logic');
       return;
-    }// Resolve the new data value from the operation's resultData
+    }    // Resolve the new data value from the operation's results
     let newValue = sourceCircle.dataValue;
     let newDataType = sourceCircle.dataType;
+    let newId = sourceCircle.id;
     
-    if (operation.resultData) {
-      newValue = this.resolveDataValue(operation.resultData, sourceCircle.dataType, operation.targetComponent);
+    if (operation.results && operation.results.length > 0) {
+      const result = operation.results[0]; // Take first result for transform
+      newValue = result.dataValue;
+      newDataType = result.dataType as any;
+      newId = result.id;
       
-      // Set appropriate data type based on the result and target component
-      if (operation.targetComponent === 'InsMem' && operation.resultData.toString().includes('INSTRUCTION')) {
-        newDataType = 'instruction';
-      } else if (operation.targetComponent === 'ALUPC' && operation.resultData.toString().includes('PC_PLUS_4')) {
-        newDataType = 'pc_value';
-      } else if (operation.targetComponent === 'Control') {
-        newDataType = 'control_signal';
-      } else if (operation.targetComponent === 'SignExtend') {
-        newDataType = 'immediate';
-      } else if (operation.targetComponent === 'RegFile') {
-        newDataType = 'register_data';
+      // Resolve actual data value if using CPU state
+      if (this.cpuState) {
+        newValue = this.resolveDataValue(result.dataValue, result.dataType, operation.targetComponent);
       }
     }
       console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
 
-    // For transform operations with resultData, create a NEW circle with the result name
-    if (operation.resultData) {
+    // For transform operations with results, create a NEW circle with the result name
+    if (operation.results && operation.results.length > 0) {
+      const result = operation.results[0];
       // Create a new circle with the result data name
       const newCircle = this.circleManager.createCircle(
         newValue,
@@ -787,8 +787,8 @@ export class InstructionAnimationController {
         stageName,
         sourceCircle.id // Parent ID
       );
-        // Give it a proper ID based on the result data - use resultData directly as ID
-      newCircle.id = operation.resultData;
+        // Give it a proper ID based on the result data - use result.id directly as ID
+      newCircle.id = result.id;
         // Add to active circles
       this.activeCircles.set(newCircle.id, newCircle);
       this.callbacks.onCircleCreate(newCircle);
@@ -1010,8 +1010,8 @@ export class InstructionAnimationController {
     if (sourceCircle) {
       sourceCircle.position = position;
       // Update progress-based properties
-      if (operation.type === 'transform' && progress >= 0.5 && operation.resultData) {
-        sourceCircle.dataValue = operation.resultData;
+      if (operation.type === 'transform' && progress >= 0.5 && operation.results && operation.results.length > 0) {
+        sourceCircle.dataValue = operation.results[0].dataValue;
       }
       this.callbacks.onCircleUpdate(sourceCircle);
     }
@@ -1578,183 +1578,185 @@ export class InstructionAnimationController {
     if (!this.cpuState) {
       return placeholderValue;
     }
-
-    try {      switch (placeholderValue.toString().toUpperCase()) {
-        case 'PC_VALUE':
-        case 'D_PC_VALUE':
-          return CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' }).value;
+    // return test
+    return 'test';
+    // try {      
+    //   switch (placeholderValue.toString().toUpperCase()) {
+    //     case 'PC_VALUE':
+    //     case 'D_PC_VALUE':
+    //       return CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' }).value;
         
-        case 'INSTRUCTION':
-        case 'D_INSTRUCTION':
-          return CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState).value;
+    //     case 'INSTRUCTION':
+    //     case 'D_INSTRUCTION':
+    //       return CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState).value;
         
-        case 'PC+4':
-        case 'D_PC_PLUS_4':
-          const pcValue = this.cpuState.pc;
-          return `0x${(pcValue + 4).toString(16).toUpperCase().padStart(8, '0')}`;
-          case 'OPCODE':
-        case 'D_OPCODE':
-          const instruction = this.cpuState.currentInstruction;
-          return instruction ? instruction.assembly.split(' ')[0].toUpperCase() : 'NOP';
+    //     case 'PC+4':
+    //     case 'D_PC_PLUS_4':
+    //       const pcValue = this.cpuState.pc;
+    //       return `0x${(pcValue + 4).toString(16).toUpperCase().padStart(8, '0')}`;
+    //       case 'OPCODE':
+    //     case 'D_OPCODE':
+    //       const instruction = this.cpuState.currentInstruction;
+    //       return instruction ? instruction.assembly.split(' ')[0].toUpperCase() : 'NOP';
         
-        // Control signals
-        case 'C_ALUSRC_1':
-          return 'C_ALUSrc=1';
-        case 'C_ALUOP':
-          return 'C_ALUOp';
-        case 'C_MEMREAD_0':
-          return 'C_MemRead=0';
-        case 'C_MEMWRITE_0':
-          return 'C_MemWrite=0';
-        case 'C_MEMTOREG_0':
-          return 'C_MemToReg=0';
-        case 'C_REGWRITE_1':
-          return 'C_RegWrite=1';
-        case 'C_BRANCHSELECT_0':
-          return 'C_BranchSelect=0';
-          case 'RN_FIELD':
-        case 'RM_FIELD':
-        case 'RD_FIELD':
-        case 'D_RN_IDX':
-        case 'D_RM_IDX':
-        case 'D_RT_IDX_MUX':
-        case 'D_WRITE_ADDR_IDX':
-          // Extract register fields from current instruction
-          if (this.cpuState.currentInstruction) {
-            const fields = CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState);
-            const assembly = fields.value.toString();
-            const parts = assembly.split(/[\s,]+/);
+    //     // Control signals
+    //     case 'C_ALUSRC_1':
+    //       return 'C_ALUSrc=1';
+    //     case 'C_ALUOP':
+    //       return 'C_ALUOp';
+    //     case 'C_MEMREAD_0':
+    //       return 'C_MemRead=0';
+    //     case 'C_MEMWRITE_0':
+    //       return 'C_MemWrite=0';
+    //     case 'C_MEMTOREG_0':
+    //       return 'C_MemToReg=0';
+    //     case 'C_REGWRITE_1':
+    //       return 'C_RegWrite=1';
+    //     case 'C_BRANCHSELECT_0':
+    //       return 'C_BranchSelect=0';
+    //       case 'RN_FIELD':
+    //     case 'RM_FIELD':
+    //     case 'RD_FIELD':
+    //     case 'D_RN_IDX':
+    //     case 'D_RM_IDX':
+    //     case 'D_RT_IDX_MUX':
+    //     case 'D_WRITE_ADDR_IDX':
+    //       // Extract register fields from current instruction
+    //       if (this.cpuState.currentInstruction) {
+    //         const fields = CPUStateExtractor.extractComponentData('instruction_memory', this.cpuState);
+    //         const assembly = fields.value.toString();
+    //         const parts = assembly.split(/[\s,]+/);
             
-            if ((placeholderValue === 'RD_FIELD' || placeholderValue === 'D_WRITE_ADDR_IDX') && parts.length > 1) {
-              return parts[1]; // First register (destination)
-            } else if ((placeholderValue === 'RN_FIELD' || placeholderValue === 'D_RN_IDX') && parts.length > 2) {
-              return parts[2]; // Second register (source 1)
-            } else if ((placeholderValue === 'RM_FIELD' || placeholderValue === 'D_RM_IDX' || placeholderValue === 'D_RT_IDX_MUX') && parts.length > 3) {
-              return parts[3]; // Third register (source 2)
-            }
-          }
-          return 'X0';          case 'IMM_FIELD':
-          case 'D_IMM':
-          case 'D_FUNCT':
-          // Extract immediate value from current instruction
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            if (placeholderValue.toString().toUpperCase() === 'D_FUNCT') {
-              // For function code, return the operation type
-              return assembly.split(' ')[0].toUpperCase();
-            } else {
-              // For immediate values
-              const immMatch = assembly.match(/#(-?\d+)/);
-              if (immMatch) {
-                return `#${immMatch[1]}`;
-              }
-            }
-          }
-          return placeholderValue.toString().toUpperCase() === 'D_FUNCT' ? 'ADD' : '#0';
+    //         if ((placeholderValue === 'RD_FIELD' || placeholderValue === 'D_WRITE_ADDR_IDX') && parts.length > 1) {
+    //           return parts[1]; // First register (destination)
+    //         } else if ((placeholderValue === 'RN_FIELD' || placeholderValue === 'D_RN_IDX') && parts.length > 2) {
+    //           return parts[2]; // Second register (source 1)
+    //         } else if ((placeholderValue === 'RM_FIELD' || placeholderValue === 'D_RM_IDX' || placeholderValue === 'D_RT_IDX_MUX') && parts.length > 3) {
+    //           return parts[3]; // Third register (source 2)
+    //         }
+    //       }
+    //       return 'X0';          case 'IMM_FIELD':
+    //       case 'D_IMM':
+    //       case 'D_FUNCT':
+    //       // Extract immediate value from current instruction
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         if (placeholderValue.toString().toUpperCase() === 'D_FUNCT') {
+    //           // For function code, return the operation type
+    //           return assembly.split(' ')[0].toUpperCase();
+    //         } else {
+    //           // For immediate values
+    //           const immMatch = assembly.match(/#(-?\d+)/);
+    //           if (immMatch) {
+    //             return `#${immMatch[1]}`;
+    //           }
+    //         }
+    //       }
+    //       return placeholderValue.toString().toUpperCase() === 'D_FUNCT' ? 'ADD' : '#0';
         
-        case 'REG_VALUE':
-          // Get register value - for ADDI, this would be the source register value
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const parts = assembly.split(/[\s,]+/);
-            if (parts.length > 2 && parts[2].startsWith('X')) {
-              const regIndex = parseInt(parts[2].substring(1));
-              if (regIndex >= 0 && regIndex < this.cpuState.registers.length) {
-                return this.cpuState.registers[regIndex];
-              }
-            }
-          }
-          return 0;
-          case 'SIGN_EXT_IMM':
-          // Get sign-extended immediate value
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const immMatch = assembly.match(/#(-?\d+)/);
-            if (immMatch) {
-              return parseInt(immMatch[1]); // Return as number for sign extension
-            }
-          }
-          return 0;
+    //     case 'REG_VALUE':
+    //       // Get register value - for ADDI, this would be the source register value
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const parts = assembly.split(/[\s,]+/);
+    //         if (parts.length > 2 && parts[2].startsWith('X')) {
+    //           const regIndex = parseInt(parts[2].substring(1));
+    //           if (regIndex >= 0 && regIndex < this.cpuState.registers.length) {
+    //             return this.cpuState.registers[regIndex];
+    //           }
+    //         }
+    //       }
+    //       return 0;
+    //       case 'SIGN_EXT_IMM':
+    //       // Get sign-extended immediate value
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const immMatch = assembly.match(/#(-?\d+)/);
+    //         if (immMatch) {
+    //           return parseInt(immMatch[1]); // Return as number for sign extension
+    //         }
+    //       }
+    //       return 0;
         
-        case 'ALU_RESULT':
-          // Calculate ALU result for ADDI instruction
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const parts = assembly.split(/[\s,]+/);
-            if (parts.length > 2 && parts[2].startsWith('X')) {
-              const regIndex = parseInt(parts[2].substring(1));
-              const regValue = regIndex < this.cpuState.registers.length ? this.cpuState.registers[regIndex] : 0;
-              const immMatch = assembly.match(/#(-?\d+)/);
-              const immValue = immMatch ? parseInt(immMatch[1]) : 0;
-              return regValue + immValue;
-            }
-          }
-          return 0;
+    //     case 'ALU_RESULT':
+    //       // Calculate ALU result for ADDI instruction
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const parts = assembly.split(/[\s,]+/);
+    //         if (parts.length > 2 && parts[2].startsWith('X')) {
+    //           const regIndex = parseInt(parts[2].substring(1));
+    //           const regValue = regIndex < this.cpuState.registers.length ? this.cpuState.registers[regIndex] : 0;
+    //           const immMatch = assembly.match(/#(-?\d+)/);
+    //           const immValue = immMatch ? parseInt(immMatch[1]) : 0;
+    //           return regValue + immValue;
+    //         }
+    //       }
+    //       return 0;
         
-        case 'WRITE_TO_REG':
-          // Value to write to register - same as ALU result for ADDI
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const parts = assembly.split(/[\s,]+/);
-            if (parts.length > 2 && parts[2].startsWith('X')) {
-              const regIndex = parseInt(parts[2].substring(1));
-              const regValue = regIndex < this.cpuState.registers.length ? this.cpuState.registers[regIndex] : 0;
-              const immMatch = assembly.match(/#(-?\d+)/);
-              const immValue = immMatch ? parseInt(immMatch[1]) : 0;
-              return regValue + immValue;
-            }
-          }
-          return 0;
+    //     case 'WRITE_TO_REG':
+    //       // Value to write to register - same as ALU result for ADDI
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const parts = assembly.split(/[\s,]+/);
+    //         if (parts.length > 2 && parts[2].startsWith('X')) {
+    //           const regIndex = parseInt(parts[2].substring(1));
+    //           const regValue = regIndex < this.cpuState.registers.length ? this.cpuState.registers[regIndex] : 0;
+    //           const immMatch = assembly.match(/#(-?\d+)/);
+    //           const immValue = immMatch ? parseInt(immMatch[1]) : 0;
+    //           return regValue + immValue;
+    //         }
+    //       }
+    //       return 0;
         
-        case 'NEW_PC':
-          // For non-branch instructions, NEW_PC is just PC+4
-          const currentPC = this.cpuState.pc;
-          const newPC = currentPC + 4;
-          return `0x${newPC.toString(16).toUpperCase().padStart(8, '0')}`;
+    //     case 'NEW_PC':
+    //       // For non-branch instructions, NEW_PC is just PC+4
+    //       const currentPC = this.cpuState.pc;
+    //       const newPC = currentPC + 4;
+    //       return `0x${newPC.toString(16).toUpperCase().padStart(8, '0')}`;
         
-        case 'SUB_RESULT':
-          // Calculate SUB result
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const parts = assembly.split(/[\s,]+/);
-            if (parts.length > 3 && parts[2].startsWith('X') && parts[3].startsWith('X')) {
-              const reg1Index = parseInt(parts[2].substring(1));
-              const reg2Index = parseInt(parts[3].substring(1));
-              const reg1Value = reg1Index < this.cpuState.registers.length ? this.cpuState.registers[reg1Index] : 0;
-              const reg2Value = reg2Index < this.cpuState.registers.length ? this.cpuState.registers[reg2Index] : 0;
-              return reg1Value - reg2Value;
-            }
-          }
-          return 0;
+    //     case 'SUB_RESULT':
+    //       // Calculate SUB result
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const parts = assembly.split(/[\s,]+/);
+    //         if (parts.length > 3 && parts[2].startsWith('X') && parts[3].startsWith('X')) {
+    //           const reg1Index = parseInt(parts[2].substring(1));
+    //           const reg2Index = parseInt(parts[3].substring(1));
+    //           const reg1Value = reg1Index < this.cpuState.registers.length ? this.cpuState.registers[reg1Index] : 0;
+    //           const reg2Value = reg2Index < this.cpuState.registers.length ? this.cpuState.registers[reg2Index] : 0;
+    //           return reg1Value - reg2Value;
+    //         }
+    //       }
+    //       return 0;
         
-        case 'REG1_VALUE':
-        case 'REG2_VALUE':
-          // Get register values for SUB instruction
-          if (this.cpuState.currentInstruction) {
-            const assembly = this.cpuState.currentInstruction.assembly;
-            const parts = assembly.split(/[\s,]+/);
-            const isReg1 = placeholderValue === 'REG1_VALUE';
-            const regPart = isReg1 ? parts[2] : parts[3];
-            if (regPart && regPart.startsWith('X')) {
-              const regIndex = parseInt(regPart.substring(1));
-              if (regIndex >= 0 && regIndex < this.cpuState.registers.length) {
-                return this.cpuState.registers[regIndex];
-              }
-            }
-          }
-          return 0;
+    //     case 'REG1_VALUE':
+    //     case 'REG2_VALUE':
+    //       // Get register values for SUB instruction
+    //       if (this.cpuState.currentInstruction) {
+    //         const assembly = this.cpuState.currentInstruction.assembly;
+    //         const parts = assembly.split(/[\s,]+/);
+    //         const isReg1 = placeholderValue === 'REG1_VALUE';
+    //         const regPart = isReg1 ? parts[2] : parts[3];
+    //         if (regPart && regPart.startsWith('X')) {
+    //           const regIndex = parseInt(regPart.substring(1));
+    //           if (regIndex >= 0 && regIndex < this.cpuState.registers.length) {
+    //             return this.cpuState.registers[regIndex];
+    //           }
+    //         }
+    //       }
+    //       return 0;
         
-        default:
-          // Try to extract component data directly
-          return CPUStateExtractor.extractComponentData(targetComponent, this.cpuState, {
-            dataType,
-            displayFormat: dataType === 'pc_value' ? 'hex' : 'decimal'
-          }).value;
-      }
-    } catch (error) {
-      console.warn('Error resolving data value:', error);
-      return placeholderValue;
-    }
+    //     default:
+    //       // Try to extract component data directly
+    //       return CPUStateExtractor.extractComponentData(targetComponent, this.cpuState, {
+    //         dataType,
+    //         displayFormat: dataType === 'pc_value' ? 'hex' : 'decimal'
+    //       }).value;
+    //   }
+    // } catch (error) {
+    //   console.warn('Error resolving data value:', error);
+    //   return placeholderValue;
+    // }
   }
 
   /**
