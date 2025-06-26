@@ -20,6 +20,9 @@ import { COLORS } from './BaseShape/constants';
 import { Ellipse, ComponentEllipse } from './BaseShape/Ellipse';
 import { VerticalSegment, HorizontalSegment } from './BaseShape/WireSegment';
 import DiagonalSlash from './BaseShape/DiagonalSlash';
+import { WORKFLOW } from '../../utils/instructionFlows/WorkFlow';
+
+
 
 const CPUDatapath: React.FC = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -35,22 +38,107 @@ const CPUDatapath: React.FC = () => {
     highlightedComponents, 
     setAnimationPath, 
     setHighlightedComponents 
-  } = useSimulatorStore();  // Animation state
+  } = useSimulatorStore();  
+
+  // Animation state
   const [isAnimating, setIsAnimating] = useState(false);
   const [activeComponents, setActiveComponents] = useState<Set<string>>(new Set());
   const [currentAnimationStages, setCurrentAnimationStages] = useState<any[]>([]);
   const [currentStageDuration, setCurrentStageDuration] = useState(1000);
   const [showStageAnimation, setShowStageAnimation] = useState(false);
+  
   // Multi-circle animation state
   const [activeCircles, setActiveCircles] = useState<Map<string, DataCircle>>(new Map());
   const [lastInstruction, setLastInstruction] = useState<string | null>(null);
   const [highlightedWirePaths, setHighlightedWirePaths] = useState<string[]>([]);
   
+  // Phase navigation state
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [phaseInProgress, setPhaseInProgress] = useState(false);
+  
   // Debug state for wire path visualization
   const [showWireDebug, setShowWireDebug] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState('PC->InsMem');
-  
 
+  // Execute single phase
+  const executePhase = async (phaseIndex: number) => {
+    if (phaseInProgress || !cpu.currentInstruction) {
+      console.log('Phase in progress or no instruction available');
+      return;
+    }
+
+    if (phaseIndex < 0 || phaseIndex >= WORKFLOW.length) {
+      console.log('Invalid phase index:', phaseIndex);
+      return;
+    }
+
+    setPhaseInProgress(true);
+    setIsAnimating(true);
+    setCurrentPhase(phaseIndex);
+
+    try {
+      const stage = WORKFLOW[phaseIndex];
+      console.log(`Executing phase ${phaseIndex + 1}: ${stage.stageName}`);
+
+      // Set up animation state
+      setShowStageAnimation(true);
+      startAnimation(`Phase ${phaseIndex + 1}`);
+      
+      // Set current CPU state for data integration
+      instructionAnimationController.setCPUState(cpu);
+      
+      // Execute the specific phase using the public method
+      await instructionAnimationController.executePhase(phaseIndex, WORKFLOW);
+      
+      console.log(`Completed phase ${phaseIndex + 1}: ${stage.stageName}`);
+    } catch (error) {
+      console.error('Phase execution error:', error);
+    } finally {
+      setPhaseInProgress(false);
+      setIsAnimating(false);
+      setShowStageAnimation(false);
+      stopAnimation();
+    }
+  };
+
+  // Simple next phase function
+  const goToNextPhase = () => {
+    if (currentPhase < WORKFLOW.length - 1) {
+      executePhase(currentPhase + 1);
+    } else {
+      // Completed all phases, restart from phase 0
+      setCurrentPhase(0);
+      executePhase(0);
+    }
+  };
+
+  // Reset phase animation state
+  const resetPhaseState = () => {
+    setCurrentPhase(0);
+    setPhaseInProgress(false);
+    setIsAnimating(false);
+    setShowStageAnimation(false);
+    setActiveCircles(new Map());
+    setHighlightedWirePaths([]);
+    stopAnimation();
+    
+    // Clear animation controller state using public method
+    instructionAnimationController.resetAnimationState();
+    
+    console.log('Phase animation state reset');
+  };
+
+  // Reset phase state when CPU state changes (step, reset, jumpToStep, loadProgram)
+  useEffect(() => {
+    resetPhaseState();
+  }, [cpu.currentInstructionIndex, cpu.pc]);
+
+  // Reset phase state when instruction changes
+  useEffect(() => {
+    if (cpu.currentInstruction !== lastInstruction) {
+      resetPhaseState();
+    }
+  }, [cpu.currentInstruction?.assembly]);
 
   useEffect(() => {
     animationController.setSpeed(animationSpeed);
@@ -2243,180 +2331,9 @@ const CPUDatapath: React.FC = () => {
         RegWrite
       </text>
     </g>
-  );  // Control signal value display function
-  const ControlSignalValues = ({ 
-    controlConfig,
-    ALUMain_ZeroAnd = "0",
-    zeroAnd_branchOr = "0",
-    branchOr_PCMux = "0",
-    ALUMain = "ADD"
-  }: {
-    controlConfig: typeof cpu.controlSignals;
-    ALUMain_ZeroAnd?: string;
-    zeroAnd_branchOr?: string;
-    branchOr_PCMux?: string;
-    ALUMain?: string;
-  }) => (
-    <g>
-      {/* Control signal values in blue - 11px bold */}
-      <text 
-        x={components.MuxReg2Loc.x + components.MuxReg2Loc.width/2 - 1}
-        y={components.RegFile.y + 9*components.RegFile.height/10 - 2}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.reg2Loc?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.BranchOR.x - 7.5}
-        y={components.BranchOR.y + 3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.uncondBranch?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.ZeroAND.x - 2}
-        y={components.ZeroAND.y + 2.5}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.zeroBranch?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.DataMem.x + components.DataMem.width/2 - 1}
-        y={components.DataMem.y - 3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.memRead?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.MuxReadMem.x + components.MuxReadMem.width/2 - 1}
-        y={components.MuxReadMem.y - 3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.memToReg?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.DataMem.x + components.DataMem.width/2 - 1}
-        y={components.DataMem.y + components.DataMem.height + 10}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.memWrite?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.MuxReadReg.x + components.MuxReadReg.width/2 - 1}
-        y={components.MuxReadReg.y - 3}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.aluSrc?.toString() || "0"}
-      </text>
-      
-      <text 
-        x={components.RegFile.x + components.RegFile.width/2 + 2}
-        y={components.RegFile.y - 3}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.regWrite?.toString() || "0"}
-      </text>
-      
-      {/* Gate signal values */}
-      <text 
-        x={components.ZeroAND.x - 2}
-        y={components.ZeroAND.y + components.ZeroAND.height/2 + 5}
-        textAnchor="end"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {ALUMain_ZeroAnd}
-      </text>
-      
-      <text 
-        x={components.ZeroAND.x + components.ZeroAND.width + 5}
-        y={components.ZeroAND.y + components.ZeroAND.height/2 - 1}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {zeroAnd_branchOr}
-      </text>
-      
-      <text 
-        x={components.MuxPC.x + components.MuxPC.width/2 - 1}
-        y={components.MuxPC.y + components.MuxPC.height + 10}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {branchOr_PCMux}
-      </text>
-      
-      <text 
-        x={components.ALUControl.x + components.ALUControl.width/2 - 3}
-        y={components.ALUControl.y + components.ALUControl.height + 10}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {controlConfig?.aluOp?.toString() || "00"}
-      </text>
-      
-      <text 
-        x={components.ALUMain.x + components.ALUMain.width/2 + 3}
-        y={components.ALUMain.y + 7*components.ALUMain.height/8 + 10}
-        textAnchor="start"
-        dominantBaseline="middle"
-        fontSize={11 * scale}
-        fontWeight="bold"
-        fill={COLORS.CONTROL_BLUE}
-      >
-        {ALUMain}
-      </text>
-    </g>
   );
+
+
 
   return (
     <div className="relative w-full h-full bg-white overflow-hidden">
@@ -2458,19 +2375,15 @@ const CPUDatapath: React.FC = () => {
         <WireComponents />
 
         {/* Draw control signals */}
-        <ControlSignalComponents />        {/* Draw components on top */}
+        <ControlSignalComponents />
+        
+        {/* Draw components on top */}
         <ComponentElements />
 
         {/* Draw text labels */}
         <TextLabels />
 
-        {/* Draw control signal values */}        <ControlSignalValues 
-          controlConfig={cpu.controlSignals}
-          ALUMain_ZeroAnd="0"
-          zeroAnd_branchOr="0"
-          branchOr_PCMux="0"
-          ALUMain={cpu.controlSignals.aluOp || "ADD"}
-        />        {/* Animation Components Layer */}
+        {/* Animation Components Layer */}
         {(showStageAnimation || isAnimating || activeCircles.size > 0) && (
           <g className="animation-layer" style={{ zIndex: 1000 }}>            {/* Wire Path Highlighter */}
             <WirePathHighlighter highlightedPaths={highlightedWirePaths} />
@@ -2497,6 +2410,10 @@ const CPUDatapath: React.FC = () => {
               <AnimationCircle
                 path={animationPath}
                 duration={currentStageDuration}
+                dataValue={cpu.currentInstruction ? `0x${cpu.pc.toString(16).toUpperCase().padStart(8, '0')}` : 'Data'}
+                dataType="pc_value"
+                color="#10B981"
+                showText={true}
                 onComplete={() => {
                   // Do nothing - completion is handled by the instruction animation controller
                   // This prevents double completion callbacks
@@ -2554,14 +2471,13 @@ const CPUDatapath: React.FC = () => {
           <div className="text-xs text-blue-200">Current Instruction</div>
           <div className="font-semibold">{cpu.currentInstruction?.assembly}</div>
           <div className="mt-2 text-xs">
-            <div className="text-blue-200">Active Control Signals:</div>
-            <div className="grid grid-cols-2 gap-1 mt-1">
-              {cpu.controlSignals?.regWrite && <div className="text-green-300">RegWrite</div>}
-              {cpu.controlSignals?.memRead && <div className="text-green-300">MemRead</div>}
-              {cpu.controlSignals?.memWrite && <div className="text-green-300">MemWrite</div>}
-              {cpu.controlSignals?.aluSrc && <div className="text-green-300">ALUSrc</div>}
-              {cpu.controlSignals?.memToReg && <div className="text-green-300">MemToReg</div>}
-              {cpu.controlSignals?.uncondBranch && <div className="text-green-300">Branch</div>}
+            <div className="text-blue-200">PC Address:</div>
+            <div className="font-mono text-green-300">0x{cpu.pc.toString(16).toUpperCase().padStart(8, '0')}</div>
+            <div className="text-blue-200 mt-1">Machine Code:</div>
+            <div className="font-mono text-yellow-300">0x{cpu.currentInstruction.machineCode}</div>
+            <div className="text-blue-200 mt-1">Zero Flag:</div>
+            <div className={`font-mono ${cpu.flags.zero ? 'text-green-300' : 'text-red-300'}`}>
+              {cpu.flags.zero ? '1' : '0'}
             </div>
           </div>
         </div>
@@ -2569,7 +2485,24 @@ const CPUDatapath: React.FC = () => {
 
 
 
-      {/* Next Step Button */}
+      {/* Simple Next Phase Button */}
+      {cpu.currentInstruction && (
+        <div className="absolute top-16 left-4 z-20">
+          <button
+            onClick={goToNextPhase}
+            disabled={phaseInProgress}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors shadow-lg ${
+              phaseInProgress
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {phaseInProgress ? 'Processing...' : 'Next Phase'}
+          </button>
+        </div>
+      )}
+
+      {/* Original Next Step Button */}
       <div className="absolute bottom-4 right-4 z-20">
         <button
           onClick={handleNextStep}
@@ -2577,7 +2510,7 @@ const CPUDatapath: React.FC = () => {
           className={`px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-all duration-200 ${
             isAnimating 
               ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 hover:shadow-xl active:scale-95'
+              : 'bg-green-600 hover:bg-green-700 hover:shadow-xl active:scale-95'
           }`}
         >
           {isAnimating ? (

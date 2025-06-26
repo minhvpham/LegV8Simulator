@@ -30,7 +30,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
   stageName: "Instruction Fetch (IF)",
   initialCircles: [],
   operations: [
-    // Initial split from PC - creates 3 parallel data flows
+    // Initial split from PC - creates 3 parallel data flows with real CPU data
     {
       type: 'split',
       timing: 0,
@@ -61,7 +61,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       ]
     }
   ],
-  finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'],
+  finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // Keep original final circle names for next stage compatibility
   duration: 800,
   simultaneousFlows: true
 };

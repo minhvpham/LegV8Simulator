@@ -1869,6 +1869,81 @@ export class InstructionAnimationController {
       return [];
     }
   }
+
+  /**
+   * Public method to execute a single phase of the instruction pipeline
+   * This allows external components to step through phases individually
+   */
+  async executePhase(phaseIndex: number, workflow: StageDataFlow[]): Promise<void> {
+    if (phaseIndex < 0 || phaseIndex >= workflow.length) {
+      throw new Error(`Invalid phase index: ${phaseIndex}. Must be between 0 and ${workflow.length - 1}`);
+    }
+
+    const stage = workflow[phaseIndex];
+    console.log(`Executing phase ${phaseIndex + 1}: ${stage.stageName}`);
+
+    // Initialize circles if this is the first phase
+    if (phaseIndex === 0 && this.activeCircles.size === 0) {
+      await this.initializePhaseAnimation();
+    }
+
+    // Execute the specific stage
+    await this.executeStageFlow(stage, phaseIndex);
+  }
+
+  /**
+   * Initialize the animation system for phase-by-phase execution
+   */
+  private async initializePhaseAnimation(): Promise<void> {
+    // Clear any existing circles
+    this.clearAllCircles();
+
+    // Initialize with first circle (PC value) at PC component with real CPU data
+    const pcPosition = this.getComponentPosition('PC');
+    
+    // Get actual PC value from CPU state
+    let pcValue: string | number = 'PC_VALUE';
+    if (this.cpuState) {
+      const { value } = CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' });
+      pcValue = value;
+    }
+    
+    const initialCircle = this.circleManager.createCircle(
+      pcValue,
+      'pc_value',
+      pcPosition,
+      'PHASE_INITIAL'
+    );
+    this.activeCircles.set(initialCircle.id, initialCircle);
+    
+    // Create fade-in animation for initial circle
+    const fadeInAnimation: CircleAnimation = {
+      circleId: initialCircle.id,
+      operation: 'fade-in',
+      duration: 300,
+      startPosition: pcPosition,
+      onUpdate: (position: Point, opacity: number) => {
+        initialCircle.opacity = opacity;
+        this.callbacks.onCircleUpdate(initialCircle);
+      }
+    };
+    
+    await this.animationSequencer.executeSequential([fadeInAnimation]);
+    this.callbacks.onCircleCreate(initialCircle);
+  }
+
+  /**
+   * Public method to reset the animation state
+   * Clears all active circles and resets internal state
+   */
+  resetAnimationState(): void {
+    this.clearAllCircles();
+    this.isPlaying = false;
+    this.currentInstruction = null;
+    this.currentStep = 0;
+    this.stageDataFlows = [];
+    console.log('Animation controller state reset');
+  }
 }
 
 // Create singleton instance
