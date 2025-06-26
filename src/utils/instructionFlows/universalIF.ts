@@ -30,7 +30,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
   stageName: "Instruction Fetch (IF)",
   initialCircles: [],
   operations: [
-    // Initial split from PC - creates 3 parallel data flows
+    // Initial split from PC - creates 3 parallel data flows with real CPU data
     {
       type: 'split',
       timing: 0,
@@ -38,21 +38,21 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       targetComponent: 'PC',
       splitResults: [
         {
-          newValue: 'D_Instruction',
+          newValue: 'PC_VALUE', // This resolves to actual PC address in hex format from CPU state
           newType: 'pc_value',
           targetComponent: 'InsMem',
           wirePath: PC_TO_INSMEM_PATH, // Wire path object - animation system calls getPathPoints()
           location: 'PC->InsMem'
         },
         {
-          newValue: 'D_PC_Plus_4',
+          newValue: 'PC+4', // This resolves to actual PC+4 value from CPU state
           newType: 'pc_value',
           targetComponent: 'ALUPC',
           wirePath: PC_TO_ALUPC_PATH, // Wire path object - animation system calls getPathPoints()
           location: 'PC->ALUPC'
         },
         {
-          newValue: 'D_PC_Branch',
+          newValue: 'PC_VALUE', // This resolves to actual PC value from CPU state
           newType: 'pc_value',
           targetComponent: 'ALUBranch',
           wirePath: PC_TO_ALUBRANCH_PATH, // Wire path object - animation system calls getPathPoints()
@@ -61,7 +61,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       ]
     }
   ],
-  finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'],
+  finalCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // Keep original final circle names for next stage compatibility
   duration: 800,
   simultaneousFlows: true
 };
