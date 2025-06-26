@@ -41,7 +41,7 @@ STUR X4, [X0, #0]
 LDUR X8, [X0, #0]
 
 ; Branch example
-CMP X1, X3
+SUBS XZR, X1, X3
 B.GT skip
 ADDI X9, XZR, #100
 
@@ -51,7 +51,7 @@ ADDI X10, XZR, #200
 ; End program
 B end
 end:
-NOP`;
+ADDI X11, XZR, #300`;
 
     setSourceCode(sampleCode);
     
@@ -84,35 +84,6 @@ NOP`;
     <div className="bg-white rounded-lg shadow-lg p-6 space-y-6">
       <h2 className="text-xl font-bold text-gray-800">LEGv8 Simulator Control</h2>
       
-      {/* Mode Toggle */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Simulation Mode
-        </label>
-        <div className="flex space-x-4">
-          <button
-            onClick={() => setMode('simulation')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              mode === 'simulation'
-                ? 'bg-cpu-blue text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            🎬 Simulation
-          </button>
-          <button
-            onClick={() => setMode('realtime')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              mode === 'realtime'
-                ? 'bg-cpu-green text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            ⚡ Realtime
-          </button>
-        </div>
-      </div>
-
       {/* Load Sample Program */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
@@ -164,53 +135,26 @@ NOP`;
         </div>
       </div>
 
-      {/* Step Navigation */}
+      {/* Animation Speed */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Step Navigation
+          Animation Speed: {animationSpeed}x
         </label>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">Step:</span>
-          <input
-            type="number"
-            min="1"
-            max={totalSteps}
-            value={currentStep + 1}
-            onChange={handleStepInput}
-            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-          />
-          <span className="text-sm text-gray-600">of {totalSteps}</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-cpu-blue h-2 rounded-full transition-all duration-300"
-            style={{ width: `${totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0}%` }}
-          />
+        <input
+          type="range"
+          min="0.1"
+          max="3"
+          step="0.1"
+          value={animationSpeed}
+          onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+        />
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>0.1x</span>
+          <span>1x</span>
+          <span>3x</span>
         </div>
       </div>
-
-      {/* Animation Speed (only in simulation mode) */}
-      {mode === 'simulation' && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Animation Speed: {animationSpeed}x
-          </label>
-          <input
-            type="range"
-            min="0.1"
-            max="3"
-            step="0.1"
-            value={animationSpeed}
-            onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-          />
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>0.1x</span>
-            <span>1x</span>
-            <span>3x</span>
-          </div>
-        </div>
-      )}
 
       {/* Current Instruction Info */}
       {cpu.currentInstruction && (

@@ -20,28 +20,28 @@ const RegisterMemoryViewer: React.FC = () => {
     return value.toString();
   };
 
-  // Helper function to read 8 bytes from memory and combine them
+  // Helper function to read 4 bytes from memory and combine them (32-bit words)
   const readMemoryWord = (baseAddress: number): number => {
     let result = 0;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 4; i++) {
       const byte = cpu.dataMemory.get(baseAddress + i) || 0;
       result += byte * Math.pow(2, i * 8);
     }
     return result;
   };
 
-  // Get data memory as array for display (8-byte words)
+  // Get data memory as array for display (4-byte words, 32-bit aligned)
   const dataMemoryArray = Array.from({ length: 32 }, (_, i) => {
-    const address = i * 8;
+    const address = i * 4;
     return {
       address,
       value: readMemoryWord(address)
     };
   });
 
-  // Get stack memory (starting from 0x80000000 and going up, 8-byte words)
+  // Get stack memory (starting from 0x80000000 and going up, 4-byte words)
   const stackMemoryArray = Array.from({ length: 32 }, (_, i) => {
-    const address = 0x80000000 + i * 8;
+    const address = 0x80000000 + i * 4;
     return {
       address,
       value: readMemoryWord(address)

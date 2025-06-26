@@ -3,6 +3,7 @@ import CPUDatapath from './components/CPU/CPUDatapath';
 import ControlPanel from './components/ControlPanel';
 import CodeEditor from './components/CodeEditor';
 import RegisterMemoryViewer from './components/RegisterMemoryViewer';
+import MachineCodeAnalysisPanel from './components/MachineCodeAnalysisPanel';
 import { useSimulatorStore } from './store/simulatorStore';
 import './index.css';
 
@@ -54,6 +55,9 @@ const App: React.FC = () => {
           )}
         </div>        {/* Register and Memory Viewer */}
         <RegisterMemoryViewer />
+
+        {/* Machine Code Analysis */}
+        <MachineCodeAnalysisPanel />
 
         {/* CPU Datapath */}
         <div className="bg-white rounded-lg shadow-lg" style={{ minHeight: '700px' }}>

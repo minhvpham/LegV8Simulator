@@ -49,6 +49,8 @@ const CPUDatapath: React.FC = () => {
   // Debug state for wire path visualization
   const [showWireDebug, setShowWireDebug] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState('PC->InsMem');
+  
+
 
   useEffect(() => {
     animationController.setSpeed(animationSpeed);
@@ -278,6 +280,8 @@ const CPUDatapath: React.FC = () => {
     if (cpu.currentInstruction) {
       const currentInstructionText = cpu.currentInstruction.assembly;
       console.log('Starting animation for instruction:', currentInstructionText);
+      
+
         // Circle persistence logic: Let the animation controller handle circle clearing
       if (lastInstruction !== null && lastInstruction !== currentInstructionText) {
         console.log('New instruction detected:', currentInstructionText);
@@ -2426,7 +2430,9 @@ const CPUDatapath: React.FC = () => {
       <div className="absolute top-4 left-4 flex items-center space-x-2 z-20">
         <div className={`w-3 h-3 rounded-full ${mode === 'simulation' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
         <span className="text-sm font-medium capitalize">{mode} Mode</span>
-      </div>      {/* SVG Datapath */}
+      </div>
+
+      {/* SVG Datapath */}
       <svg
         ref={svgRef}
         className="absolute w-full"
@@ -2561,59 +2567,7 @@ const CPUDatapath: React.FC = () => {
         </div>
       )}
 
-      {/* Instruction breakdown display (like in reference) */}
-      {cpu.currentInstruction && (
-        <div className="absolute bottom-16 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg z-20 min-w-[400px]">
-          <div className="text-sm font-semibold text-gray-800 mb-2">Instruction Breakdown</div>
-          <div className="font-mono text-sm">
-            <div className="flex items-center space-x-4 mb-2">
-              <span className="font-bold text-blue-600">{cpu.currentInstruction.assembly}</span>
-            </div>
-            <div className="grid grid-cols-5 gap-2 text-xs border-t pt-2">
-              <div className="text-center">
-                <div className="text-blue-600 font-bold">opcode</div>
-                <div className="bg-blue-100 p-1 rounded">[31-21]</div>
-                <div className="text-xs text-gray-600 mt-1">11 bits</div>
-              </div>
-              <div className="text-center">
-                <div className="text-green-600 font-bold">Rm</div>
-                <div className="bg-green-100 p-1 rounded">[20-16]</div>
-                <div className="text-xs text-gray-600 mt-1">5 bits</div>
-              </div>
-              <div className="text-center">
-                <div className="text-purple-600 font-bold">shamt</div>
-                <div className="bg-purple-100 p-1 rounded">[15-10]</div>
-                <div className="text-xs text-gray-600 mt-1">6 bits</div>
-              </div>
-              <div className="text-center">
-                <div className="text-orange-600 font-bold">Rn</div>
-                <div className="bg-orange-100 p-1 rounded">[9-5]</div>
-                <div className="text-xs text-gray-600 mt-1">5 bits</div>
-              </div>
-              <div className="text-center">
-                <div className="text-red-600 font-bold">Rd</div>
-                <div className="bg-red-100 p-1 rounded">[4-0]</div>
-                <div className="text-xs text-gray-600 mt-1">5 bits</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}      {/* Status Panel */}
-      <div className="absolute bottom-4 left-4 bg-white border border-gray-300 rounded-lg p-3 shadow-lg min-w-[200px] z-20">
-        <div className="text-sm font-semibold text-gray-800 mb-2">CPU Status</div>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="space-y-1">
-            <div className="font-medium text-gray-700">PC:</div>
-            <div className="text-blue-600">0x{cpu.pc.toString(16).padStart(8, '0')}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="font-medium text-gray-700">Flags:</div>
-            <div className={`${cpu.flags?.zero ? 'text-red-600' : 'text-gray-400'}`}>
-              Z: {cpu.flags?.zero ? '1' : '0'}
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* Next Step Button */}
       <div className="absolute bottom-4 right-4 z-20">
@@ -2637,7 +2591,6 @@ const CPUDatapath: React.FC = () => {
         </button>
       </div>
     </div>
-
   );
 };
 

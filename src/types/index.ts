@@ -105,6 +105,9 @@ export interface SimulatorState {
   // Multi-circle animation state
   activeCircles: Map<string, DataCircle>;
   circleHistory: DataCircle[][];
+  
+  // Machine code analysis state
+  currentMachineCode: any; // Will be typed properly when needed
 }
 
 export interface AnimationConfig {

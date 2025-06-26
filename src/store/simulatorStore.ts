@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
 import { SimulatorState, CPUState, Instruction, SimulationMode, Point, ComponentHighlight, DataCircle } from '../types';
+import { MachineCodeBreakdown, LEGv8InstructionParser } from '../utils/instructionMachineCodeParser';
 
 // Enable MapSet plugin for Immer to handle Maps and Sets
 enableMapSet();
@@ -192,10 +193,10 @@ const executeInstruction = (instruction: Instruction, state: CPUState): void => 
 
   // Helper function to resolve branch labels to instruction addresses
   const resolveLabel = (label: string, instructions: Instruction[]): number => {
-    console.log(`\n=== RESOLVING LABEL "${label}" ===`);
-    console.log('Available instructions:');
+    console.log(`\n🏷️  === RESOLVING LABEL "${label}" ===`);
+    console.log('📋 Available instructions:');
     instructions.forEach((inst, i) => {
-      console.log(`  ${i}: "${inst.assembly}" (type: ${inst.type}, addr: ${inst.address.toString(16)})`);
+      console.log(`  ${i}: "${inst.assembly}" (type: ${inst.type}, addr: 0x${inst.address.toString(16)})`);
     });
     
     // Strategy 1: Handle numeric values as instruction indices
@@ -203,7 +204,7 @@ const executeInstruction = (instruction: Instruction, state: CPUState): void => 
     if (!isNaN(numericValue)) {
       if (numericValue >= 0 && numericValue < instructions.length) {
         const address = instructions[numericValue].address;
-        console.log(`✓ Numeric label ${label} -> instruction ${numericValue} -> address ${address.toString(16)}`);
+        console.log(`✅ Numeric label ${label} -> instruction ${numericValue} -> address 0x${address.toString(16)}`);
         return address;
       } else {
         console.log(`❌ Numeric label ${label} out of range [0, ${instructions.length})`);
@@ -935,11 +936,16 @@ const executeInstruction = (instruction: Instruction, state: CPUState): void => 
       case 'B': {
         // B label (Unconditional branch)
         const label = parts[1];
+        console.log(`\n🔀 Executing unconditional branch: B ${label}`);
         const targetAddress = resolveLabel(label, state.instructionMemory);
+        console.log(`🔍 Resolved label "${label}" to address: ${targetAddress !== -1 ? '0x' + targetAddress.toString(16) : 'FAILED'}`);
         if (targetAddress !== -1) {
+          console.log(`🔀 Unconditional branching from PC ${state.pc.toString(16)} to ${targetAddress.toString(16)}`);
           state.pc = targetAddress;
           state.controlSignals.uncondBranch = true;
           state.controlSignals.branchTaken = true;
+        } else {
+          console.log(`❌ Failed to resolve label: ${label}`);
         }
         break;
       }
@@ -1008,27 +1014,28 @@ const executeInstruction = (instruction: Instruction, state: CPUState): void => 
         // Handle conditional branches (B.EQ, B.NE, etc.)
         if (opcode.startsWith('B.')) {
           const condition = opcode.substring(2);
-          console.log(`\nExecuting conditional branch: ${opcode}`);
-          console.log(`Condition: ${condition}`);
-          console.log(`Current flags:`, state.flags);
+          console.log(`\n🔀 Executing conditional branch: ${opcode}`);
+          console.log(`📋 Condition: ${condition}`);
+          console.log(`🚩 Current flags:`, state.flags);
           
           const conditionResult = checkCondition(condition);
-          console.log(`Condition check result: ${conditionResult}`);
+          console.log(`✅ Condition check result: ${conditionResult}`);
           
           if (conditionResult) {
             const label = parts[1];
-            console.log(`Branch condition met, resolving label: ${label}`);
+            console.log(`🎯 Branch condition met, resolving label: ${label}`);
             const targetAddress = resolveLabel(label, state.instructionMemory);
+            console.log(`🔍 Resolved label "${label}" to address: ${targetAddress !== -1 ? targetAddress.toString(16) : 'FAILED'}`);
             if (targetAddress !== -1) {
-              console.log(`Branching from PC ${state.pc.toString(16)} to ${targetAddress.toString(16)}`);
+              console.log(`🔀 Branching from PC ${state.pc.toString(16)} to ${targetAddress.toString(16)}`);
               state.pc = targetAddress;
               state.controlSignals.flagBranch = true;
               state.controlSignals.branchTaken = true;
             } else {
-              console.log(`Failed to resolve label: ${label}`);
+              console.log(`❌ Failed to resolve label: ${label}`);
             }
           } else {
-            console.log(`Branch condition not met, continuing to next instruction`);
+            console.log(`🚫 Branch condition not met, continuing to next instruction`);
           }
           break;
         }
@@ -1066,6 +1073,58 @@ const executeInstruction = (instruction: Instruction, state: CPUState): void => 
   }
 };
 
+// Helper function to calculate executable instruction index (excluding labels)
+const calculateExecutableInstructionIndex = (instructions: Instruction[], targetStep: number): number => {
+  let executableInstructionIndex = 0;
+  for (let i = 0; i < targetStep; i++) {
+    if (instructions[i]?.type !== 'L') {
+      executableInstructionIndex++;
+    }
+  }
+  return executableInstructionIndex;
+};
+
+// Helper function to update current instruction and parse machine code
+const updateCurrentInstruction = (state: any, instruction: Instruction | null) => {
+  state.cpu.currentInstruction = instruction;
+  
+  // Parse machine code for the current instruction (before execution)
+  if (instruction) {
+    console.log('🔍 Updating current instruction:', instruction.assembly);
+    console.log('📋 Instruction details:', {
+      type: instruction.type,
+      address: '0x' + instruction.address.toString(16),
+      fields: instruction.fields
+    });
+    
+    // Pass current PC and instruction memory for proper address calculation in branches
+    const machineCode = LEGv8InstructionParser.parseToMachineCode(
+      instruction.assembly,
+      instruction.address,
+      state.cpu.instructionMemory
+    );
+    state.currentMachineCode = machineCode;
+    console.log('✅ Machine code parsed for:', instruction.assembly, machineCode ? 'SUCCESS' : 'FAILED');
+    if (machineCode) {
+      console.log('🔧 Machine code details:', {
+        format: machineCode.format,
+        hex: machineCode.hexMachineCode,
+        binary: machineCode.machineCode32Bit.substring(0, 8) + '...'
+      });
+      
+      // Log address field details for branch instructions
+      if (machineCode.fields.address) {
+        console.log('🎯 Address field:', machineCode.fields.address);
+      }
+    } else {
+      console.warn('❌ Failed to parse machine code for instruction:', instruction.assembly);
+    }
+  } else {
+    console.log('🔍 Clearing current instruction (null)');
+    state.currentMachineCode = null;
+  }
+};
+
 export const useSimulatorStore = create<SimulatorStore>()(
   immer((set, get) => ({
     // Initial state
@@ -1087,6 +1146,9 @@ export const useSimulatorStore = create<SimulatorStore>()(
     // Multi-circle animation state
     activeCircles: new Map(),
     circleHistory: [],
+    
+    // Machine code analysis state
+    currentMachineCode: null,
 
     // Actions
     setMode: (mode) =>
@@ -1106,7 +1168,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
         state.currentStep = 0;
         state.cpu.pc = 0x400000;
         state.cpu.currentInstructionIndex = 0;
-        state.cpu.currentInstruction = instructions[0] || null;
+        updateCurrentInstruction(state, instructions[0] || null);
         
         // Reset CPU state
         state.cpu.registers = new Array(32).fill(0);
@@ -1138,11 +1200,15 @@ export const useSimulatorStore = create<SimulatorStore>()(
             
             // Skip label-only instructions automatically
             if (currentInstruction.type === 'L') {
-              console.log(`Auto-skipping label-only instruction: ${currentInstruction.assembly}`);
+              console.log(`⏭️ Auto-skipping label-only instruction: ${currentInstruction.assembly}`);
               state.currentStep += 1;
               state.cpu.pc = 0x400000 + state.currentStep * 4;
-              state.cpu.currentInstructionIndex = state.currentStep;
-              state.cpu.currentInstruction = state.cpu.instructionMemory[state.currentStep] || null;
+              
+              // Calculate executable instruction index for proper highlighting
+              state.cpu.currentInstructionIndex = calculateExecutableInstructionIndex(state.cpu.instructionMemory, state.currentStep);
+              const nextInstruction = state.cpu.instructionMemory[state.currentStep];
+              console.log(`📍 After skipping label, next instruction at step ${state.currentStep}: ${nextInstruction?.assembly || 'null'}`);
+              updateCurrentInstruction(state, nextInstruction || null);
               return;
             }
             
@@ -1155,18 +1221,43 @@ export const useSimulatorStore = create<SimulatorStore>()(
             // Check if a branch was taken
             if (state.cpu.controlSignals.branchTaken) {
               // Branch taken: PC was already updated by the instruction
-              // Convert PC address back to instruction index
-              const newStep = (state.cpu.pc - 0x400000) / 4;
-              console.log(`Branch taken! PC: ${state.cpu.pc.toString(16)} -> Step: ${newStep}`);
-              console.log(`Total steps available: ${state.totalSteps}`);
-              console.log(`Step ${newStep} valid? ${newStep >= 0 && newStep < state.totalSteps}`);
+              // Find the instruction with the matching address instead of calculating arithmetically
+              let newStep = -1;
+              for (let i = 0; i < state.cpu.instructionMemory.length; i++) {
+                if (state.cpu.instructionMemory[i].address === state.cpu.pc) {
+                  newStep = i;
+                  console.log(`🎯 Found instruction at PC 0x${state.cpu.pc.toString(16)}: Step ${i} = "${state.cpu.instructionMemory[i].assembly}"`);
+                  break;
+                }
+              }
+              
+              console.log(`🔀 Branch taken! PC: 0x${state.cpu.pc.toString(16)} -> Step: ${newStep}`);
+              console.log(`📊 Total steps available: ${state.totalSteps}`);
+              console.log(`✓ Step ${newStep} valid? ${newStep >= 0 && newStep < state.totalSteps}`);
               
               if (newStep >= 0 && newStep < state.totalSteps) {
-                console.log(`Setting currentStep from ${state.currentStep} to ${newStep}`);
-                state.currentStep = newStep;
-                state.cpu.currentInstructionIndex = newStep;
-                state.cpu.currentInstruction = state.cpu.instructionMemory[newStep] || null;
-                console.log(`✓ Successfully jumped to step ${newStep}: "${state.cpu.currentInstruction?.assembly || 'null'}"`);
+                console.log(`📈 Setting currentStep from ${state.currentStep} to ${newStep}`);
+                
+                // Check if target step is a label-only instruction, skip to next executable instruction
+                let actualStep = newStep;
+                while (actualStep < state.totalSteps && state.cpu.instructionMemory[actualStep]?.type === 'L') {
+                  console.log(`⏭️ Step ${actualStep} is label-only "${state.cpu.instructionMemory[actualStep].assembly}", skipping to next`);
+                  actualStep++;
+                }
+                
+                if (actualStep < state.totalSteps) {
+                  state.currentStep = actualStep;
+                  
+                  // Calculate the executable instruction index (excluding labels) for proper highlighting
+                  const executableInstructionIndex = calculateExecutableInstructionIndex(state.cpu.instructionMemory, actualStep);
+                  state.cpu.currentInstructionIndex = executableInstructionIndex;
+                  const targetInstruction = state.cpu.instructionMemory[actualStep];
+                  console.log(`🎯 Final target instruction at step ${actualStep} (executable index ${executableInstructionIndex}):`, targetInstruction?.assembly || 'null');
+                  updateCurrentInstruction(state, targetInstruction || null);
+                  console.log(`✅ Successfully jumped to step ${actualStep}: "${state.cpu.currentInstruction?.assembly || 'null'}"`);
+                } else {
+                  console.log(`❌ No executable instruction found after label at step ${newStep}`);
+                }
               } else {
                 console.log(`❌ Invalid branch target: step ${newStep} out of range [0, ${state.totalSteps})`);
               }
@@ -1175,10 +1266,19 @@ export const useSimulatorStore = create<SimulatorStore>()(
               state.currentStep += 1;
               state.cpu.pc = 0x400000 + state.currentStep * 4;
               
-              // Update current instruction info to point to the NEXT instruction
-              state.cpu.currentInstructionIndex = state.currentStep;
-              state.cpu.currentInstruction = state.cpu.instructionMemory[state.currentStep] || null;
-              console.log(`No branch, next instruction: ${state.cpu.currentInstruction?.assembly || 'null'}`);
+              // Skip any label-only instructions in sequential execution
+              while (state.currentStep < state.totalSteps && state.cpu.instructionMemory[state.currentStep]?.type === 'L') {
+                console.log(`⏭️ Sequential execution skipping label-only instruction at step ${state.currentStep}: ${state.cpu.instructionMemory[state.currentStep].assembly}`);
+                state.currentStep += 1;
+                state.cpu.pc = 0x400000 + state.currentStep * 4;
+              }
+              
+              // Calculate the executable instruction index (excluding labels) for proper highlighting
+              const executableInstructionIndex = calculateExecutableInstructionIndex(state.cpu.instructionMemory, state.currentStep);
+              state.cpu.currentInstructionIndex = executableInstructionIndex;
+              const nextInstruction = state.cpu.instructionMemory[state.currentStep];
+              console.log(`➡️ No branch, next instruction at step ${state.currentStep} (executable index ${executableInstructionIndex}): ${nextInstruction?.assembly || 'null'}`);
+              updateCurrentInstruction(state, nextInstruction || null);
             }
           }
         }
@@ -1202,7 +1302,7 @@ export const useSimulatorStore = create<SimulatorStore>()(
         state.currentStep = 0;
         state.cpu.pc = 0x400000;
         state.cpu.currentInstructionIndex = 0;
-        state.cpu.currentInstruction = state.cpu.instructionMemory[0] || null;
+        updateCurrentInstruction(state, state.cpu.instructionMemory[0] || null);
         state.cpu.registers = new Array(32).fill(0);
         state.cpu.registers[28] = 0x80000000; // SP (Stack Pointer) starts at 0x80000000
         state.cpu.flags = {
@@ -1239,8 +1339,10 @@ export const useSimulatorStore = create<SimulatorStore>()(
           // Update current state
           state.currentStep = step;
           state.cpu.pc = 0x400000 + step * 4;
-          state.cpu.currentInstructionIndex = step;
-          state.cpu.currentInstruction = state.cpu.instructionMemory[step] || null;
+          
+          // Calculate executable instruction index for proper highlighting
+          state.cpu.currentInstructionIndex = calculateExecutableInstructionIndex(state.cpu.instructionMemory, step);
+          updateCurrentInstruction(state, state.cpu.instructionMemory[step] || null);
         }
       }),
 
@@ -1328,14 +1430,20 @@ export const useSimulatorStore = create<SimulatorStore>()(
         }
       }),
 
-    clearCircles: () =>
-      set((state) => {
-        // Save current circles to history before clearing
-        const currentCircles = Array.from(state.activeCircles.values());
-        state.circleHistory.push(currentCircles);
-        
-        // Clear active circles
-        state.activeCircles.clear();
-      }),
+       clearCircles: () =>
+     set((state) => {
+       // Save current circles to history before clearing
+       const currentCircles = Array.from(state.activeCircles.values());
+       state.circleHistory.push(currentCircles);
+       
+       // Clear active circles
+       state.activeCircles.clear();
+     }),
+   
+   // Machine code analysis actions
+   setCurrentMachineCode: (machineCode: MachineCodeBreakdown | null) =>
+     set((state) => {
+       state.currentMachineCode = machineCode;
+     }),
   }))
 );
