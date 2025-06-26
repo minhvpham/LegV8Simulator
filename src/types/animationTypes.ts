@@ -52,10 +52,6 @@ export interface DataFlowOperation {
   timing: number;
   sourceCircleIds: string[];
   targetComponent: string;
-  resultData?: any;
-  targetDataValue?: any;
-  targetDataType?: string;
-  splitResults?: SplitOperation[];
   results?: SplitResult[];
   wirePath?: Point[] | { getPathPoints: (components: any, verticalLines: any) => Point[] };
   preserveSource?: boolean; // Optional: if true, keeps the source circle when type is 'split'

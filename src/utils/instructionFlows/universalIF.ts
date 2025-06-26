@@ -36,27 +36,27 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
       timing: 0,
       sourceCircleIds: [],
       targetComponent: 'PC',
-      splitResults: [
+      results: [
         {
-          newValue: 'PC_VALUE', // This resolves to actual PC address in hex format from CPU state
-          newType: 'pc_value',
+          id: 'D_Instruction',
+          dataValue: 'Test',
+          dataType: 'pc_value',
           targetComponent: 'InsMem',
           wirePath: PC_TO_INSMEM_PATH, // Wire path object - animation system calls getPathPoints()
-          location: 'PC->InsMem'
         },
         {
-          newValue: 'PC+4', // This resolves to actual PC+4 value from CPU state
-          newType: 'pc_value',
+          id: 'D_PC_Plus_4',
+          dataValue: 'Test',
+          dataType: 'pc_value',
           targetComponent: 'ALUPC',
           wirePath: PC_TO_ALUPC_PATH, // Wire path object - animation system calls getPathPoints()
-          location: 'PC->ALUPC'
         },
         {
-          newValue: 'PC_VALUE', // This resolves to actual PC value from CPU state
-          newType: 'pc_value',
+          id: 'D_PC_Branch',
+          dataValue: 'Test',
+          dataType: 'pc_value',
           targetComponent: 'ALUBranch',
           wirePath: PC_TO_ALUBRANCH_PATH, // Wire path object - animation system calls getPathPoints()
-          location: 'PC->ALUBranch'
         }
       ]
     }

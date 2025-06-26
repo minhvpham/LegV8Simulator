@@ -43,57 +43,58 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
       timing: 0,
       sourceCircleIds: ['D_Instruction'], // Split the instruction rectangle
       targetComponent: 'InsMem',
-      splitResults: [
+      results: [
         {
-          newValue: 'D_Opcode',
-          newType: 'instruction',
+          id: 'D_Opcode',
+          dataValue: 'Test',
+          dataType: 'instruction',
           targetComponent: 'Control',
-          wirePath: INSMEM_TO_CONTROL_PATH,
-          location: 'InsMem->Control'
+          wirePath: INSMEM_TO_CONTROL_PATH
         },
         {
-          newValue: 'D_Rn_Idx',
-          newType: 'register_field',
-          targetComponent: 'RegFile',
-          wirePath: INSMEM_TO_REGFILE_READ1_PATH,
-          location: 'InsMem->RegFile_Read1'
+          id: 'D_Rn_Idx',
+          dataValue: 'Test',
+          dataType: 'register_field',
+          targetComponent: 'RegFile_Read1',
+          wirePath: INSMEM_TO_REGFILE_READ1_PATH
         },
         {
-          newValue: 'D_Rm_Idx',
-          newType: 'register_field',
-          targetComponent: 'MuxReg2Loc',
-          wirePath: INSMEM_TO_MUXREG2LOC1_PATH,
-          location: 'InsMem->MuxReg2Loc1'
+          id: 'D_Rm_Idx',
+          dataValue: 'Test',
+          dataType: 'register_field',
+          targetComponent: 'MuxReg2Loc1',
+          wirePath: INSMEM_TO_MUXREG2LOC1_PATH
         },
         {
-          newValue: 'D_Rt_Idx_Mux',
-          newType: 'register_field',
-          targetComponent: 'MuxReg2Loc',
-          wirePath: INSMEM_TO_MUXREG2LOC2_PATH,
-          location: 'InsMem->MuxReg2Loc2'
+          id: 'D_Rt_Idx_Mux',
+          dataValue: 'Test',
+          dataType: 'register_field',
+          targetComponent: 'MuxReg2Loc2',
+          wirePath: INSMEM_TO_MUXREG2LOC2_PATH
         },
         {
-          newValue: 'D_Write_Addr_Idx',
-          newType: 'register_field',
-          targetComponent: 'RegFile',
-          wirePath: INSMEM_TO_REGFILE_WRITE_PATH,
-          location: 'InsMem->RegFile_Write'
+          id: 'D_Write_Addr_Idx',
+          dataValue: 'Test',
+          dataType: 'register_field',
+          targetComponent: 'RegFile_Write',
+          wirePath: INSMEM_TO_REGFILE_WRITE_PATH
         },
         {
-          newValue: 'D_Imm',
-          newType: 'immediate_field',
+          id: 'D_Imm',
+          dataValue: 'Test',
+          dataType: 'immediate_field',
           targetComponent: 'SignExtend',
-          wirePath: INSMEM_TO_SIGNEXTEND_PATH,
-          location: 'InsMem->SignExtend'
+          wirePath: INSMEM_TO_SIGNEXTEND_PATH
         },
         {
-          newValue: 'D_Funct',
-          newType: 'function_code',
+          id: 'D_Funct',
+          dataValue: 'Test',
+          dataType: 'function_code',
           targetComponent: 'ALUControl',
-          wirePath: INSMEM_TO_ALUCONTROL_PATH,
-          location: 'InsMem->ALUControl'
+          wirePath: INSMEM_TO_ALUCONTROL_PATH
         }
-      ]    }
+      ]
+    }
   ],  finalCircles: [
     'D_PC_Plus_4',          // From IF stage, needed for PC update
     'D_Opcode',              // At Control unit, ready for split
