@@ -45,13 +45,12 @@ import { BRANCHOR_TO_MUXPC_SIGNAL_PATH } from './wirePaths/BRANCHOR_TO_MUXPC_SIG
  */
 
 // =================================================================================================
-// STAGE 3: Execute (I-Format)
-// Performs ALU operation (Rn + Imm) and calculates branch target address in parallel.
+// STAGE 3: Execute 
 // =================================================================================================
-const I_FORMAT_EX_STAGE: StageDataFlow = {
+const FORMAT_EX_STAGE: StageDataFlow = {
   stageName: "Execute (EX)",
   initialCircles: [
-    'D_Opcode', 'D_Rn_Idx', 'D_Rm_Idx', 'D_Rt_Idx_Mux', 'D_Write_Addr_Idx', 'D_Imm', 'D_Funct',
+    'D_Opcode', 'D_Rn_Idx', 'D_Rm_Idx', 'D_Rt_Idx', 'D_Write_Addr_Idx', 'D_Imm', 'D_Funct',
     'D_PC_Plus_4', 'D_PC_Branch'
   ],
   operations: [    // 1. Control signal generation. D_Opcode is split to create signals AND pass itself through.
@@ -64,74 +63,74 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       results: [         
         {
           id: 'C_RegWrite',
-          dataValue: '1',
+          dataValue: 'C_RegWrite',
           dataType: 'control_signal',
           targetComponent: 'RegFile',
           wirePath: CONTROL_REGWRITE_SIGNAL_PATH
         },
         {
           id: 'C_Reg2Loc',
-          dataValue: '0',
+          dataValue: 'C_Reg2Loc',
           dataType: 'control_signal',
           targetComponent: 'MuxReg2Loc',
           wirePath: CONTROL_REG2LOC_SIGNAL_PATH
         },
         {
           id: 'C_ALUSrc',
-          dataValue: '1',
+          dataValue: 'C_ALUSrc',
           dataType: 'control_signal',
           targetComponent: 'MuxReadReg',
           wirePath: CONTROL_ALUSRC_SIGNAL_PATH
         },
         {
           id: 'C_ALUOp',
-          dataValue: '10',
+          dataValue: 'C_ALUOp',
           dataType: 'control_signal',
           targetComponent: 'ALUControl',
           wirePath: CONTROL_ALUOP_SIGNAL_PATH
         },
         {
           id: 'C_MemRead',
-          dataValue: '0',
+          dataValue: 'C_MemRead',
           dataType: 'control_signal',
           targetComponent: 'DataMem',
           wirePath: CONTROL_MEMREAD_SIGNAL_PATH
         },
         {
           id: 'C_MemWrite',
-          dataValue: '0',
+          dataValue: 'C_MemWrite',
           dataType: 'control_signal',
           targetComponent: 'DataMem',
           wirePath: CONTROL_MEMWRITE_SIGNAL_PATH
         },
         {
           id: 'C_MemToReg',
-          dataValue: '0',
+          dataValue: 'C_MemToReg',
           dataType: 'control_signal',
           targetComponent: 'MuxReadMem',
           wirePath: CONTROL_MEMTOREG_SIGNAL_PATH
         },
         {
           id: 'C_UncondBranch',
-          dataValue: '0',
+          dataValue: 'C_UncondBranch',
           dataType: 'control_signal',
           targetComponent: 'BranchOR',
           wirePath: CONTROL_UNCONDITIONAL_BRANCH_SIGNAL_PATH
         },
         {
           id: 'C_ZeroBranch',
-          dataValue: '0',
+          dataValue: 'C_ZeroBranch',
           dataType: 'control_signal',
           targetComponent: 'ZeroAND',
           wirePath: CONTROL_ZERO_BRANCH_SIGNAL_PATH
         }
       ]
     },
-    // 2. Main ALU path: Read Rn, move immediate, select immediate with MUX.
+    // 2. REG2LOC Multiplexer: Select between Rm and Rt based on Reg2Loc control signal
     {
       type: 'merge', 
-      timing: 300, 
-      sourceCircleIds: ['D_Rm_Idx', 'C_Reg2Loc', 'D_Rt_Idx_Mux'], 
+      timing: 200, 
+      sourceCircleIds: ['D_Rm_Idx', 'C_Reg2Loc', 'D_Rt_Idx'], 
       targetComponent: 'MuxReg2Loc',
       results: [{
         id: 'D_RegRead2_Idx',
@@ -162,14 +161,14 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
         results: [
             {
                 id: 'D_RegRead2_Val_Mux',
-                dataValue: 'test',
+                dataValue: 'D_RegRead2_Val_Mux',
                 dataType: 'register_data',
                 targetComponent: 'MuxReadReg',
                 wirePath: REGFILE_TO_MUXREADREG_PATH
             },
             {
                 id: 'D_RegRead2_Val_DataMem',
-                dataValue: 'test',
+                dataValue: 'D_RegRead2_Val_Mux',
                 dataType: 'register_data',
                 targetComponent: 'DataMem',
                 wirePath: REGFILE_TO_DATAMEM_PATH
@@ -189,42 +188,42 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       }]
     },
     { type: 'move', timing: 1800, sourceCircleIds: ['D_Rn_Val'], targetComponent: 'ALUMain', wirePath: REGFILE_TO_ALUMAIN_PATH },
-    { 
-      type: 'transform', 
-      timing: 2100, 
-      sourceCircleIds: ['D_Imm'], 
-      targetComponent: 'SignExtend', 
-      results: [{
-        id: 'D_SignExt_1',
-        dataValue: 'test',
-        dataType: 'immediate',
-        targetComponent: 'SignExtend'
-      }]
-    }, 
+    // { 
+    //   type: 'transform', 
+    //   timing: 2100, 
+    //   sourceCircleIds: ['D_Imm'], 
+    //   targetComponent: 'SignExtend', 
+    //   results: [{
+    //     id: 'D_SignExt_1',
+    //     dataValue: 'test',
+    //     dataType: 'immediate',
+    //     targetComponent: 'SignExtend'
+    //   }]
+    // }, 
     { 
       type: 'split',
       timing: 2400,
-      sourceCircleIds: ['D_SignExt_1'],
+      sourceCircleIds: ['D_Imm'],
       targetComponent: 'SignExtend',
       preserveSource: false, // Don't keep D_SignExt_1 as cycle is complete
       results: [
         {
           id: 'D_SignExt_Imm',
-          dataValue: 'test',
+          dataValue: 'D_SignExt_Imm',
           dataType: 'immediate',
           targetComponent: 'MuxReadReg',
           wirePath: SIGNEXTEND_TO_MUXREADREG_PATH
         },
         {
           id: 'D_Branch_Imm',
-          dataValue: 'test',
+          dataValue: 'D_Branch_Imm',
           dataType: 'immediate',
           targetComponent: 'ShiftLeft2',
           wirePath: SIGNEXTEND_TO_SHIFTLEFT2_PATH
         }
       ]
     },
-    // Select the immediate value for ALU operation.
+    // 2. MuxReadReg: Select between Rn value and Sign-extended immediate based on ALUSrc control signal
     { 
       type: 'merge', 
       timing: 2700, 
@@ -237,7 +236,6 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'MuxReadReg'
       }]
     },
-    // { type: 'transform', timing: 400, sourceCircleIds: ['D_SignExt_Imm'], targetComponent: 'MuxReadReg', resultData: 'D_ALUSrc_Mux_Out' },
     { type: 'move', timing: 3000, sourceCircleIds: ['D_ALUSrc_Mux_Out'], targetComponent: 'ALUMain', wirePath: MUXREADREG_TO_ALUMAIN_PATH },
     // 3. ALU Control signal generation.
     { 
@@ -247,7 +245,7 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       targetComponent: 'ALUControl', 
       results: [{
         id: 'C_ALU_Func_Binary',
-        dataValue: '0010',
+        dataValue: 'C_ALU_Func_Binary',
         dataType: 'control_signal',
         targetComponent: 'ALUControl'
       }]
@@ -273,7 +271,7 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       targetComponent: 'ShiftLeft2', 
       results: [{
         id: 'D_Shift_Result',
-        dataValue: 'test',
+        dataValue: 'D_Shift_Result',
         dataType: 'immediate',
         targetComponent: 'ShiftLeft2'
       }]
@@ -286,7 +284,7 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
       targetComponent: 'ALUBranch', 
       results: [{
         id: 'D_Branch_Addr_Result',
-        dataValue: 'test',
+        dataValue: 'D_Branch_Addr_Result',
         dataType: 'address',
         targetComponent: 'ALUBranch'
       }]
@@ -300,21 +298,21 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
         results: [
           { 
             id: 'D_ALU_Result_Mem', 
-            dataValue: 'test', 
+            dataValue: 'D_ALU_Result_Mem', 
             dataType: 'register_data', 
             targetComponent: 'DataMem', 
             wirePath: ALUMAIN_TO_DATAMEM_PATH
           },
           { 
             id: 'D_ALU_Result_Mux', 
-            dataValue: 'test', 
+            dataValue: 'D_ALU_Result_Mux', 
             dataType: 'register_data', 
             targetComponent: 'MuxReadMem', 
             wirePath: ALUMAIN_TO_MUXREADMEM_PATH
           },
           { 
             id: 'D_ALU_Result_Zero', 
-            dataValue: 'test', 
+            dataValue: 'D_ALU_Result_Zero', 
             dataType: 'register_data', 
             targetComponent: 'ZeroAND', 
             wirePath: ALUMAIN_TO_ZEROAND_SIGNAL_PATH
@@ -343,9 +341,8 @@ const I_FORMAT_EX_STAGE: StageDataFlow = {
 
 // =================================================================================================
 // STAGE 4: Memory Access (I-Format)
-// A pass-through stage for arithmetic instructions.
 // =================================================================================================
-const I_FORMAT_MEM_STAGE: StageDataFlow = {
+const FORMAT_MEM_STAGE: StageDataFlow = {
   stageName: "Memory (MEM)",
   initialCircles: [
     'D_RegRead2_Val_DataMem',
@@ -371,7 +368,7 @@ const I_FORMAT_MEM_STAGE: StageDataFlow = {
       preserveSource: true,
       results: [{
         id: 'D_DataMem_Addr_Ready',
-        dataValue: 'test',
+        dataValue: 'D_DataMem_Addr_Ready',
         dataType: 'address',
         targetComponent: 'DataMem'
       }]
@@ -380,21 +377,28 @@ const I_FORMAT_MEM_STAGE: StageDataFlow = {
       type: 'merge', 
       timing: 100, 
       sourceCircleIds: ['D_DataMem_Addr_Ready', 'C_MemWrite', 'D_ALU_Result_Mem'], 
-      targetComponent: 'DataMem'
-    },
-    { 
-      type: 'merge', 
-      timing: 200, 
-      sourceCircleIds: ['D_RegRead2_Val_DataMem', 'C_MemRead'], 
-      targetComponent: 'DataMem', 
+      targetComponent: 'DataMem',
       results: [{
-        id: 'D_DataMem_read',
-        dataValue: 'test',
+        id: 'D_MemWrite_Operation',
+        dataValue: 'MEMORY_WRITE_OPERATION',
         dataType: 'memory_data',
         targetComponent: 'DataMem'
       }]
     },
-    { type: 'move', timing: 300, sourceCircleIds: ['D_DataMem_read'], targetComponent: 'MuxReadMem', wirePath: DATAMEM_TO_MUXREADMEM_PATH }
+    { 
+      type: 'merge', 
+      timing: 400, 
+      sourceCircleIds: ['D_RegRead2_Val_DataMem', 'C_MemRead'], 
+      targetComponent: 'DataMem', 
+      results: [{
+        id: 'D_DataMem_read',
+        dataValue: 'MEMORY_READ_OPERATION',
+        dataType: 'memory_data',
+        targetComponent: 'DataMem'
+      }
+    ]
+    },
+    { type: 'move', timing: 500, sourceCircleIds: ['D_DataMem_read'], targetComponent: 'MuxReadMem', wirePath: DATAMEM_TO_MUXREADMEM_PATH }
   ],
   finalCircles: [
     'D_DataMem_read',
@@ -408,15 +412,14 @@ const I_FORMAT_MEM_STAGE: StageDataFlow = {
     'C_UncondBranch',
     'C_ZeroBranch'
   ],
-  duration: 500,
+  duration: 700,
   simultaneousFlows: false
 };
 
 // =================================================================================================
 // STAGE 5: Write Back (I-Format)
-// Writes the ALU result into the destination register.
 // =================================================================================================
-const I_FORMAT_WB_STAGE: StageDataFlow = {
+const FORMAT_WB_STAGE: StageDataFlow = {
   stageName: "Write Back (WB)",
   initialCircles: [
     'D_DataMem_read',
@@ -437,7 +440,7 @@ const I_FORMAT_WB_STAGE: StageDataFlow = {
       targetComponent: 'MuxReadMem', 
       results: [{
         id: 'D_RegFile_Write',
-        dataValue: 'test',
+        dataValue: 'D_RegFile_Write',
         dataType: 'register_data',
         targetComponent: 'MuxReadMem'
       }]
@@ -450,7 +453,7 @@ const I_FORMAT_WB_STAGE: StageDataFlow = {
       targetComponent: 'RegFile', 
       results: [{
         id: 'D_RegFile_Write_Addr',
-        dataValue: 'test',
+        dataValue: 'D_RegFile_Write_Addr',
         dataType: 'register_data',
         targetComponent: 'RegFile'
       }]
@@ -475,7 +478,6 @@ const I_FORMAT_WB_STAGE: StageDataFlow = {
 
 // =================================================================================================
 // STAGE 6: PC Update
-// Selects PC+4 as the next instruction address.
 // =================================================================================================
 const PC_UPDATE_STAGE: StageDataFlow = {
   stageName: "PC Update",
@@ -494,7 +496,7 @@ const PC_UPDATE_STAGE: StageDataFlow = {
       targetComponent: 'ZeroAND', 
       results: [{
         id: 'D_Branch_0',
-        dataValue: 'test',
+        dataValue: 'D_Branch_0',
         dataType: 'control_signal',
         targetComponent: 'ZeroAND'
       }]
@@ -507,7 +509,7 @@ const PC_UPDATE_STAGE: StageDataFlow = {
       targetComponent: 'BranchOR', 
       results: [{
         id: 'D_Branch_1',
-        dataValue: 'test',
+        dataValue: 'D_Branch_1',
         dataType: 'control_signal',
         targetComponent: 'BranchOR'
       }]
@@ -524,7 +526,7 @@ const PC_UPDATE_STAGE: StageDataFlow = {
       targetComponent: 'MuxPC', 
       results: [{
         id: 'D_Next_PC',
-        dataValue: 'test',
+        dataValue: 'D_Next_PC',
         dataType: 'pc_value',
         targetComponent: 'MuxPC'
       }]
@@ -548,8 +550,8 @@ const PC_UPDATE_STAGE: StageDataFlow = {
 export const WORKFLOW: StageDataFlow[] = [
   UNIVERSAL_IF_STAGE,
   UNIVERSAL_ID_STAGE,
-  I_FORMAT_EX_STAGE,
-  I_FORMAT_MEM_STAGE,
-  I_FORMAT_WB_STAGE,
+  FORMAT_EX_STAGE,
+  FORMAT_MEM_STAGE,
+  FORMAT_WB_STAGE,
   PC_UPDATE_STAGE
 ];

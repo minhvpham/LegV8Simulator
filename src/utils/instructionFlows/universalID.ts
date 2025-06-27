@@ -39,7 +39,7 @@ export function resolveWirePathCoordinates(wirePathObject: any, components: any,
  */
 export const UNIVERSAL_ID_STAGE: StageDataFlow = {
   stageName: "Instruction Decode (ID)",
-  initialCircles: ['D_PC_Input', 'D_Instruction', 'D_PC_Branch'], // From IF stage
+  initialCircles: ['D_PC_Plus_4', 'D_Instruction', 'D_PC_Branch'], // From IF stage
   operations: [
     // First: InsMem reads the PC address and outputs machine code in binary
     {
@@ -117,7 +117,7 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
     }
   ],
   finalCircles: [
-    'D_PC_Input',           // From IF stage, needed for PC calculations  
+    'D_PC_Plus_4',           // From IF stage, needed for PC calculations  
     'D_Opcode',             // At Control unit, ready for signal generation
     'D_Rn_Idx',             // At RegFile Read1 port
     'D_Rm_Idx',             // At MuxReg2Loc for register selection

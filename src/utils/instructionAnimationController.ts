@@ -100,6 +100,12 @@ export class InstructionAnimationController {
       console.log(`🔧 32-bit machine code: ${machineCode.machineCode32Bit}`);
       console.log(`🔧 Bit verification - [9-5]: ${machineCode.machineCode32Bit.substring(22, 27)}`);
       console.log(`🔧 Bit verification - [20-16]: ${machineCode.machineCode32Bit.substring(11, 16)}`);
+      console.log(`🔧 Bit verification - [4-0]: ${machineCode.machineCode32Bit.substring(27, 32)}`);
+      console.log(`🔧 Bit verification - [31-21]: ${machineCode.machineCode32Bit.substring(0, 11)}` );
+      console.log(`🔧 Bit verification - [31-0]: ${machineCode.machineCode32Bit}`)
+      // control signals
+      console.log(`🔧 Control signals: ${machineCode.controlSignals}`
+      );
     }
   }
 
@@ -545,11 +551,236 @@ export class InstructionAnimationController {
               console.log(`🎯 Resolved INSTRUCTION_FIELD_31_0 to: ${actualValue}`);
             }
             break;
+          case 'C_REGWRITE':
+            if (this.machineCodeBreakdown?.controlSignals?.regWrite !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.regWrite ? '1' : '0';
+              console.log(`🎯 Resolved C_REGWRITE to: ${actualValue}`);
+            }
+            break;
+          case 'C_ALUOP':
+            if (this.machineCodeBreakdown?.controlSignals?.aluOp) {
+              actualValue = this.machineCodeBreakdown.controlSignals.aluOp;
+              console.log(`🎯 Resolved C_ALUOP to: ${actualValue}`);
+            }
+            break;
+          case 'C_ALUSRC':
+            if (this.machineCodeBreakdown?.controlSignals?.aluSrc !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.aluSrc ? '1' : '0';
+              console.log(`🎯 Resolved C_ALUSRC to: ${actualValue}`);
+            }
+            break;
+          case 'C_MEMREAD':
+            if (this.machineCodeBreakdown?.controlSignals?.memRead !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.memRead ? '1' : '0';
+              console.log(`🎯 Resolved C_MEMREAD to: ${actualValue}`);
+            }
+            break;
+          case 'C_MEMWRITE':
+            if (this.machineCodeBreakdown?.controlSignals?.memWrite !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.memWrite ? '1' : '0';
+              console.log(`🎯 Resolved C_MEMWRITE to: ${actualValue}`);
+            }
+            break;
+          case 'C_REG2LOC':
+            if (this.machineCodeBreakdown?.controlSignals?.reg2Loc !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.reg2Loc ? '1' : '0';
+              console.log(`🎯 Resolved C_REG2LOC to: ${actualValue}`);
+            }
+            break;
+          case 'C_UNCONDBRANCH':
+            if (this.machineCodeBreakdown?.controlSignals?.uncondBranch !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.uncondBranch ? '1' : '0';
+              console.log(`🎯 Resolved C_UNCOND_BRANCH to: ${actualValue}`);
+            }
+            break;
+          case 'C_ZEROBRANCH':
+            if (this.machineCodeBreakdown?.controlSignals?.zeroBranch !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.zeroBranch ? '1' : '0';
+              console.log(`🎯 Resolved C_ZERO_BRANCH to: ${actualValue}`);
+            }
+            break;
+          case 'C_MEMTOREG':
+            if (this.machineCodeBreakdown?.controlSignals?.memToReg !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.memToReg ? '1' : '0';
+              console.log(`🎯 Resolved C_MEMTOREG to: ${actualValue}`);
+            }
+            break;
+          case 'C_FLAGWRITE':
+            if (this.machineCodeBreakdown?.controlSignals?.flagWrite !== undefined) {
+              actualValue = this.machineCodeBreakdown.controlSignals.flagWrite ? '1' : '0';
+              console.log(`🎯 Resolved C_FLAGWRITE to: ${actualValue}`);
+            }
+            break;
+          case 'C_ALUCONTROLOUT':
+            if (this.machineCodeBreakdown?.controlSignals?.aluControlOut) {
+              actualValue = this.machineCodeBreakdown.controlSignals.aluControlOut;
+              console.log(`🎯 Resolved C_ALUCONTROLOUT to: ${actualValue}`);
+            }
+            break;
+
+          case 'D_SIGNEXT_IMM':
+          case 'D_BRANCH_IMM':
+            // Sign extension logic for immediate values
+            if (this.machineCodeBreakdown?.machineCode32Bit && this.machineCodeBreakdown?.format) {
+              const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
+              const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
+              
+              console.log(`🎯 Sign Extension: Processing ${placeholder} for ${instructionFormat}-type instruction`);
+              console.log(`🎯 Full instruction: ${instructionBinary}`);
+              
+              let extractedBits = '';
+              let bitCount = 0;
+              
+              // Extract immediate bits based on instruction format
+              switch (instructionFormat) {
+                case 'I':
+                case 'I-TYPE':
+                  // I-Type: Extract bits [21:10] (12 bits)
+                  extractedBits = instructionBinary.substring(10, 22); // positions 10-21 (12 bits)
+                  bitCount = 12;
+                  console.log(`🎯 I-Type: Extracted bits [21:10] = ${extractedBits}`);
+                  break;
+                  
+                case 'D':
+                case 'D-TYPE':
+                  // D-Type: Extract bits [20:12] (9 bits)
+                  extractedBits = instructionBinary.substring(11, 20); // positions 11-19 (9 bits)
+                  bitCount = 9;
+                  console.log(`🎯 D-Type: Extracted bits [20:12] = ${extractedBits}`);
+                  break;
+                  
+                case 'CB':
+                case 'CB-TYPE':
+                  // CB-Type: Extract bits [23:5] (19 bits)
+                  extractedBits = instructionBinary.substring(8, 27); // positions 8-26 (19 bits)
+                  bitCount = 19;
+                  console.log(`🎯 CB-Type: Extracted bits [23:5] = ${extractedBits}`);
+                  break;
+                  
+                case 'B':
+                case 'B-TYPE':
+                  // B-Type: Extract bits [25:0] (26 bits)
+                  extractedBits = instructionBinary.substring(6, 32); // positions 6-31 (26 bits)
+                  bitCount = 26;
+                  console.log(`🎯 B-Type: Extracted bits [25:0] = ${extractedBits}`);
+                  break;
+                  
+                default:
+                  console.warn(`🔴 Unknown instruction format: ${instructionFormat}, defaulting to I-Type`);
+                  extractedBits = instructionBinary.substring(10, 22); // Default to I-Type
+                  bitCount = 12;
+                  break;
+              }
+              
+              // Perform sign extension to 64 bits
+              if (extractedBits.length > 0) {
+                const msb = extractedBits[0]; // Most significant bit
+                const isNegative = msb === '1';
+                
+                // Calculate the number of bits to pad (64 - extracted bits)
+                const paddingBits = 64 - bitCount;
+                const paddingValue = isNegative ? '1' : '0';
+                const padding = paddingValue.repeat(paddingBits);
+                
+                // Create the 64-bit sign-extended value
+                const signExtended64Bit = padding + extractedBits;
+                
+                console.log(`🎯 Sign Extension Details:`);
+                console.log(`   - Extracted ${bitCount} bits: ${extractedBits}`);
+                console.log(`   - MSB: ${msb} (${isNegative ? 'negative' : 'positive'})`);
+                console.log(`   - Padding: ${paddingBits} bits of '${paddingValue}'`);
+                console.log(`   - Final 64-bit: ${signExtended64Bit}`);
+                
+                actualValue = signExtended64Bit
+                console.log(`🎯 Resolved ${placeholder} to: ${actualValue}`);
+              }
+            } else {
+              console.warn(`🔴 Cannot perform sign extension: missing machineCode32Bit or format`);
+              actualValue = placeholder; // Keep placeholder if no data available
+            }
+            break;
+          case 'D_REGREAD2_VAL_MUX':
+          case 'D_REGREAD2_VAL_DATAMEM':
+            // For split operations that should preserve the source circle's actual data value
+            if (this.cpuState && sourceCircle) {
+              // Use the actual data value from the source circle
+              actualValue = sourceCircle.dataValue;
+              console.log(`🎯 Resolved ${placeholder} to source circle value: ${actualValue}`);
+            }
+            break;
             
-          default:
+
+            default:
             // Keep original value if no placeholder match
             console.log(`📋 Using original value for ${placeholder}: ${actualValue}`);
             break;
+            case 'D_ALU_RESULT_MEM':
+            case 'D_ALU_RESULT_MUX':
+            case 'D_ALU_RESULT_ZERO':
+            // ALU Result split operation - get source ALU result and apply specific logic
+              if (this.cpuState && operation.sourceCircleIds.includes('D_ALU_Result')) {
+                const aluResultCircle = sourceCircle;
+                
+                if (aluResultCircle) {
+                let aluResultValue: number;
+                
+                // Parse ALU result value
+                if (typeof aluResultCircle.dataValue === 'string') {
+                  if (aluResultCircle.dataValue.startsWith('0x')) {
+                  aluResultValue = parseInt(aluResultCircle.dataValue, 16);
+                  } else if (aluResultCircle.dataValue.startsWith('0b')) {
+                  aluResultValue = parseInt(aluResultCircle.dataValue.slice(2), 2);
+                  } else if (/^-?\d+$/.test(aluResultCircle.dataValue)) {
+                  aluResultValue = parseInt(aluResultCircle.dataValue, 10);
+                  } else {
+                  aluResultValue = parseInt(aluResultCircle.dataValue, 10);
+                  }
+                } else {
+                  aluResultValue = Number(aluResultCircle.dataValue);
+                }
+                
+                console.log(`🎯 ALU Result Split: Processing ${splitResult.id} with ALU result: ${aluResultValue}`);
+                
+                // Get instruction format for context
+                const instructionFormat = this.machineCodeBreakdown?.format;
+                console.log(`🔧 Instruction format: ${instructionFormat}`);
+                
+                // Apply specific logic based on the split result ID
+                switch (splitResult.id) {
+                  case 'D_ALU_Result_Mem':
+                  // For DataMem: Pass through the ALU result as memory address
+                  actualValue = aluResultValue.toString();
+                  console.log(`✅ D_ALU_Result_Mem: ALU result = ${actualValue} (for memory address)`);
+                  break;
+                  
+                  case 'D_ALU_Result_Mux':
+                  // For MuxReadMem: Pass through the ALU result as potential write-back data
+                  actualValue = aluResultValue.toString();
+                  console.log(`✅ D_ALU_Result_Mux: ALU result = ${actualValue} (for write-back mux)`);
+                  break;
+                  
+                  case 'D_ALU_Result_Zero':
+                  // For ZeroAND: Calculate Zero flag (1 if ALU result is 0, 0 otherwise)
+                  const zeroFlag = (aluResultValue === 0) ? 1 : 0;
+                  actualValue = zeroFlag.toString();
+                  console.log(`✅ D_ALU_Result_Zero: ALU result ${aluResultValue} → Zero flag = ${zeroFlag}`);
+                  break;
+                  
+                  default:
+                  // Default: Pass through ALU result
+                  actualValue = aluResultValue.toString();
+                  console.log(`✅ ${splitResult.id}: ALU result = ${actualValue} (default pass-through)`);
+                  break;
+                }
+                } else {
+                console.error(`🔴 ALU Result Split: Could not find D_ALU_Result circle for ${splitResult.id}`);
+                actualValue = '0'; // Fallback value
+                }
+              } else {
+                console.warn(`🔴 ALU Result Split: No CPU state or D_ALU_Result source for ${splitResult.id}`);
+                actualValue = splitResult.dataValue; // Use placeholder value
+              }
+              break;
         }
       }
       
@@ -657,7 +888,8 @@ export class InstructionAnimationController {
     console.log(`Split operation complete. Active circles: ${this.activeCircles.size}`);
   }
   /**
-   * Execute merge operation: multiple circles become one circle   */  private async executeMergeOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+   * Execute merge operation: multiple circles become one circle   */ 
+  private async executeMergeOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
     console.log('=== MERGE OPERATION DEBUG ===');
     console.log('Operation:', operation);
     console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
@@ -737,26 +969,26 @@ export class InstructionAnimationController {
     }// Get target position for merge
     const targetPosition = this.getPositionWithOffset(operation.targetComponent, 0);
     
-    // Create animations to move all source circles to merge point
-    const convergenceAnimations: CircleAnimation[] = sourceCircles.map(circle => ({
-      circleId: circle.id,
-      operation: 'move',
-      duration: 500,
-      startPosition: circle.position,
-      endPosition: targetPosition,
-      path: this.getWirePathBetweenComponents(
-        this.getComponentNameFromPosition(circle.position),
-        operation.targetComponent
-      ),
-      onUpdate: (position: Point, progress: number) => {
-        circle.position = position;
-        circle.opacity = Math.max(1 - progress * 0.3, 0.4); // Slight fade as they converge
-        this.callbacks.onCircleUpdate(circle);
-      }
-    }));
+    // // Create animations to move all source circles to merge point
+    // const convergenceAnimations: CircleAnimation[] = sourceCircles.map(circle => ({
+    //   circleId: circle.id,
+    //   operation: 'move',
+    //   duration: 500,
+    //   startPosition: circle.position,
+    //   endPosition: targetPosition,
+    //   path: this.getWirePathBetweenComponents(
+    //     this.getComponentNameFromPosition(circle.position),
+    //     operation.targetComponent
+    //   ),
+    //   onUpdate: (position: Point, progress: number) => {
+    //     circle.position = position;
+    //     circle.opacity = Math.max(1 - progress * 0.3, 0.4); // Slight fade as they converge
+    //     this.callbacks.onCircleUpdate(circle);
+    //   }
+    // }));
 
-    // Execute convergence animations in parallel
-    await this.animationSequencer.executeParallel(convergenceAnimations);    // Create merged circle with combined data
+    // // Execute convergence animations in parallel
+    // await this.animationSequencer.executeParallel(convergenceAnimations);    // Create merged circle with combined data
     let resolvedData = 'MERGED_DATA';
     let mergedId = 'MERGED_DATA';
     let mergedDataType = 'register_data';
@@ -771,21 +1003,21 @@ export class InstructionAnimationController {
       if (operation.targetComponent === 'MuxReg2Loc' && 
           operation.sourceCircleIds.includes('D_Rm_Idx') && 
           operation.sourceCircleIds.includes('C_Reg2Loc') && 
-          operation.sourceCircleIds.includes('D_Rt_Idx_Mux')) {
+          operation.sourceCircleIds.includes('D_Rt_Idx')) {
         
         console.log('🎯 IMPLEMENTING REG2LOC MULTIPLEXER LOGIC');
         
         // Find the control signal value
         const reg2LocCircle = sourceCircles.find(c => c.id === 'C_Reg2Loc');
         const rmIdxCircle = sourceCircles.find(c => c.id === 'D_Rm_Idx');
-        const rtIdxCircle = sourceCircles.find(c => c.id === 'D_Rt_Idx_Mux');
+        const rtIdxCircle = sourceCircles.find(c => c.id === 'D_Rt_Idx');
         
         if (reg2LocCircle && rmIdxCircle && rtIdxCircle) {
           const reg2LocValue = reg2LocCircle.dataValue.toString();
           
           console.log(`🔧 Reg2Loc = ${reg2LocValue}`);
           console.log(`🔧 D_Rm_Idx = ${rmIdxCircle.dataValue} (Instruction [20-16])`);
-          console.log(`🔧 D_Rt_Idx_Mux = ${rtIdxCircle.dataValue} (Instruction [4-0])`);
+          console.log(`🔧 D_Rt_Idx = ${rtIdxCircle.dataValue} (Instruction [4-0])`);
           
           // Implement multiplexer logic
           if (reg2LocValue === '0') {
@@ -795,7 +1027,7 @@ export class InstructionAnimationController {
           } else {
             // Select input 1: D_Rt_Idx_Mux (Instruction field [4-0])
             resolvedData = rtIdxCircle.dataValue.toString();
-            console.log(`✅ Reg2Loc=1: Selected D_Rt_Idx_Mux = ${resolvedData}`);
+            console.log(`✅ Reg2Loc=1: Selected D_Rt_Idx = ${resolvedData}`);
           }
         } else {
           console.error('🔴 REG2LOC MERGE: Missing required circles');
@@ -821,28 +1053,723 @@ export class InstructionAnimationController {
           console.log(`🔧 ALUOp = ${aluOpValue} (binary)`);
           console.log(`🔧 D_Funct = ${functValue} (function field)`);
           
-          // Generate ALU control signals based on ALUOp and function field
-          // For I-format ADDI: ALUOp=10, function field irrelevant -> ALU should ADD (0010)
-          if (aluOpValue === '10') {
-            // Arithmetic/Logic instruction (both I-format and R-format): perform ADD operation for ADDI
-            resolvedData = '0010';
-            console.log(`✅ ALUOp=10 (Arithmetic): Generated ALU Control = ${resolvedData} (ADD)`);
-          } else if (aluOpValue === '01') {
-            // Branch instruction: use function field to determine operation
-            resolvedData = '0111'; // Set Less Than for branch comparisons
-            console.log(`✅ ALUOp=01 (Branch): Generated ALU Control = ${resolvedData} (Set Less Than)`);
-          } else if (aluOpValue === '00') {
-            // Load/Store instruction: perform ADD for address calculation
-            resolvedData = '0010';
-            console.log(`✅ ALUOp=00 (Load/Store): Generated ALU Control = ${resolvedData} (ADD for address)`);
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Use ALU control output directly from machine code breakdown
+          if (this.machineCodeBreakdown?.controlSignals?.aluControlOut) {
+            resolvedData = this.machineCodeBreakdown.controlSignals.aluControlOut;
+            console.log(`✅ Using machineCode.controlSignals.aluControlOut = ${resolvedData} for ${instructionFormat}-format instruction`);
           } else {
-            // Other ALUOp values (11 = Move, etc.)
-            resolvedData = '1111'; // Pass through B operand
-            console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
+            // Fallback to original logic if machine code breakdown is not available
+            console.warn('⚠️ Machine code breakdown not available, using fallback ALU control logic');
+            
+            // Generate ALU control signals based on ALUOp and function field
+            if (aluOpValue === '10') {
+              // Arithmetic/Logic instruction (both I-format and R-format): perform ADD operation for ADDI
+              resolvedData = '0010';
+              console.log(`✅ ALUOp=10 (Arithmetic): Generated ALU Control = ${resolvedData} (ADD)`);
+            } else if (aluOpValue === '01') {
+              // Branch instruction: use function field to determine operation
+              resolvedData = '0111'; // Set Less Than for branch comparisons
+              console.log(`✅ ALUOp=01 (Branch): Generated ALU Control = ${resolvedData} (Set Less Than)`);
+            } else if (aluOpValue === '00') {
+              // Load/Store instruction: perform ADD for address calculation
+              resolvedData = '0010';
+              console.log(`✅ ALUOp=00 (Load/Store): Generated ALU Control = ${resolvedData} (ADD for address)`);
+            } else {
+              // Other ALUOp values (11 = Move, etc.)
+              resolvedData = '1111'; // Pass through B operand
+              console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
+            }
           }
         } else {
           console.error('🔴 ALU CONTROL MERGE: Missing required circles');
           console.error(`aluOpCircle: ${aluOpCircle?.id}, functCircle: ${functCircle?.id}`);
+        }
+      }
+      
+      // Special case: ALU Source Multiplexer Logic
+      if (operation.targetComponent === 'MuxReadReg' && 
+          operation.sourceCircleIds.includes('D_RegRead2_Val_Mux') && 
+          operation.sourceCircleIds.includes('D_SignExt_Imm') && 
+          operation.sourceCircleIds.includes('C_ALUSrc')) {
+        
+        console.log('🎯 IMPLEMENTING ALUSRC MULTIPLEXER LOGIC');
+        
+        // Find the control signal and data values
+        const aluSrcCircle = sourceCircles.find(c => c.id === 'C_ALUSrc');
+        const regDataCircle = sourceCircles.find(c => c.id === 'D_RegRead2_Val_Mux');
+        const immDataCircle = sourceCircles.find(c => c.id === 'D_SignExt_Imm');
+        
+        if (aluSrcCircle && regDataCircle && immDataCircle) {
+          const aluSrcValue = aluSrcCircle.dataValue.toString();
+          
+          console.log(`🔧 C_ALUSrc = ${aluSrcValue} (control signal)`);
+          console.log(`🔧 D_RegRead2_Val_Mux = ${regDataCircle.dataValue} (from Register)`);
+          console.log(`🔧 D_SignExt_Imm = ${immDataCircle.dataValue} (from Immediate)`);
+          
+          // Get the instruction format to determine the logic
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Implement multiplexer logic based on ALUSrc control signal
+          if (aluSrcValue === '0') {
+            // Select input 0: Register data (for R-Type, CBZ)
+            resolvedData = regDataCircle.dataValue.toString();
+            console.log(`✅ ALUSrc=0: Selected Register data = ${resolvedData} (R-Type/CBZ)`);
+          } else {
+            // Select input 1: Immediate data (for I-Type, D-Type)
+            resolvedData = immDataCircle.dataValue.toString();
+            console.log(`✅ ALUSrc=1: Selected Immediate data = ${resolvedData} (I-Type/D-Type)`);
+          }
+        } else {
+          console.error('🔴 ALUSRC MUX MERGE: Missing required circles');
+          console.error(`aluSrcCircle: ${aluSrcCircle?.id}, regDataCircle: ${regDataCircle?.id}, immDataCircle: ${immDataCircle?.id}`);
+        }
+      }
+      
+      // Special case: ALU Main Calculation Logic
+      if (operation.targetComponent === 'ALUMain' && 
+          operation.sourceCircleIds.includes('D_Rn_Val') && 
+          operation.sourceCircleIds.includes('D_ALUSrc_Mux_Out') && 
+          operation.sourceCircleIds.includes('C_ALU_Func_Binary')) {
+        
+        console.log('🎯 IMPLEMENTING ALU MAIN CALCULATION LOGIC');
+        
+        // Find the required circles for ALU calculation
+        const rnValCircle = sourceCircles.find(c => c.id === 'D_Rn_Val');
+        const aluSrcMuxCircle = sourceCircles.find(c => c.id === 'D_ALUSrc_Mux_Out');
+        const aluFuncCircle = sourceCircles.find(c => c.id === 'C_ALU_Func_Binary');
+        
+        if (rnValCircle && aluSrcMuxCircle && aluFuncCircle) {
+          // Parse operands - handle both binary strings and numeric values
+          let operand1: number;
+          let operand2: number;
+          
+          // Convert operand1 (D_Rn_Val)
+          if (typeof rnValCircle.dataValue === 'string') {
+            if (rnValCircle.dataValue.startsWith('0x')) {
+              operand1 = parseInt(rnValCircle.dataValue, 16);
+            } else if (rnValCircle.dataValue.startsWith('0b')) {
+              operand1 = parseInt(rnValCircle.dataValue.slice(2), 2);
+            } else if (/^\d+$/.test(rnValCircle.dataValue)) {
+              operand1 = parseInt(rnValCircle.dataValue, 10);
+            } else {
+              // Try to parse as binary string (5-bit register indices)
+              operand1 = parseInt(rnValCircle.dataValue, 2);
+            }
+          } else {
+            operand1 = Number(rnValCircle.dataValue);
+          }
+          
+          // Convert operand2 (D_ALUSrc_Mux_Out)
+          if (typeof aluSrcMuxCircle.dataValue === 'string') {
+            if (aluSrcMuxCircle.dataValue.startsWith('0x')) {
+              operand2 = parseInt(aluSrcMuxCircle.dataValue, 16);
+            } else if (aluSrcMuxCircle.dataValue.startsWith('0b')) {
+              operand2 = parseInt(aluSrcMuxCircle.dataValue.slice(2), 2);
+            } else if (/^\d+$/.test(aluSrcMuxCircle.dataValue)) {
+              operand2 = parseInt(aluSrcMuxCircle.dataValue, 10);
+            } else {
+              // Try to parse as binary string or sign-extended immediate
+              operand2 = parseInt(aluSrcMuxCircle.dataValue, 2);
+            }
+          } else {
+            operand2 = Number(aluSrcMuxCircle.dataValue);
+          }
+          
+          const aluFuncCode = aluFuncCircle.dataValue.toString();
+          
+          console.log(`🔧 ALU Calculation:`);
+          console.log(`   - Operand1 (D_Rn_Val): ${rnValCircle.dataValue} → ${operand1}`);
+          console.log(`   - Operand2 (D_ALUSrc_Mux_Out): ${aluSrcMuxCircle.dataValue} → ${operand2}`);
+          console.log(`   - Function Code (C_ALU_Func_Binary): ${aluFuncCode}`);
+          
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Perform ALU calculation based on function code
+          let aluResult: number;
+          
+          switch (aluFuncCode) {
+            case '0000': // AND
+              aluResult = operand1 & operand2;
+              console.log(`   - Operation: ${operand1} & ${operand2} = ${aluResult} (AND)`);
+              break;
+            case '0001': // ORR
+              aluResult = operand1 | operand2;
+              console.log(`   - Operation: ${operand1} | ${operand2} = ${aluResult} (ORR)`);
+              break;
+            case '0010': // ADD
+              aluResult = operand1 + operand2;
+              console.log(`   - Operation: ${operand1} + ${operand2} = ${aluResult} (ADD)`);
+              break;
+            case '0011': // EOR (XOR)
+              aluResult = operand1 ^ operand2;
+              console.log(`   - Operation: ${operand1} ^ ${operand2} = ${aluResult} (EOR/XOR)`);
+              break;
+            case '0110': // SUB
+              aluResult = operand1 - operand2;
+              console.log(`   - Operation: ${operand1} - ${operand2} = ${aluResult} (SUB)`);
+              break;
+            case '0111': // Pass input B (for CBZ)
+              aluResult = operand2;
+              console.log(`   - Operation: Pass operand2 = ${aluResult} (CBZ)`);
+              break;
+            case '1000': // LSL (Left Shift Logical)
+              aluResult = operand1 << operand2;
+              console.log(`   - Operation: ${operand1} << ${operand2} = ${aluResult} (LSL)`);
+              break;
+            case '1001': // LSR (Logical Shift Right)
+              aluResult = operand1 >>> operand2; // Use unsigned right shift
+              console.log(`   - Operation: ${operand1} >>> ${operand2} = ${aluResult} (LSR)`);
+              break;
+            case '1110': // MOVK - Special case
+            case '1111': // MOVZ - Special case
+              aluResult = operand2; // Pass the immediate value
+              console.log(`   - Operation: Pass immediate = ${aluResult} (MOVK/MOVZ)`);
+              break;
+            default:
+              aluResult = 0;
+              console.log(`   - Operation: Unknown function code ${aluFuncCode}, defaulting to 0`);
+              break;
+          }
+          
+          // Ensure result is within 32-bit signed integer range
+          aluResult = (aluResult | 0); // Convert to 32-bit signed integer
+          
+          // // Format result based on display preference (typically hex for addresses/data)
+          // resolvedData = `0x${(aluResult >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
+          // console.log(`✅ ALU Calculation Result: ${aluResult} → ${resolvedData}`);
+          resolvedData = aluResult.toString(); // Use raw number for now, can format later if needed
+          
+        } else {
+          console.error('🔴 ALU MAIN MERGE: Missing required circles');
+          console.error(`rnValCircle: ${rnValCircle?.id}, aluSrcMuxCircle: ${aluSrcMuxCircle?.id}, aluFuncCircle: ${aluFuncCircle?.id}`);
+          // Fallback to default value
+          resolvedData = '0x00000000';
+        }
+      }
+      
+      // Special case: Branch Address Calculation at ALUBranch
+      if (operation.targetComponent === 'ALUBranch' && 
+          operation.sourceCircleIds.includes('D_PC_Branch') && 
+          operation.sourceCircleIds.includes('D_Shift_Result')) {
+        
+        console.log('🎯 IMPLEMENTING BRANCH ADDRESS CALCULATION');
+        
+        // Find the PC and shifted offset values
+        const pcBranchCircle = sourceCircles.find(c => c.id === 'D_PC_Branch');
+        const shiftResultCircle = sourceCircles.find(c => c.id === 'D_Shift_Result');
+        
+        if (pcBranchCircle && shiftResultCircle) {
+          // Parse PC value - handle different formats
+          let pcValue: number;
+          const pcStringValue = pcBranchCircle.dataValue.toString();
+          
+          if (pcStringValue.startsWith('0x')) {
+            pcValue = parseInt(pcStringValue, 16);
+          } else if (pcStringValue.startsWith('0b')) {
+            pcValue = parseInt(pcStringValue.slice(2), 2);
+          } else {
+            pcValue = parseInt(pcStringValue, 10);
+          }
+          
+          // Parse shifted offset value - handle different formats
+          let offsetValue: number;
+          const offsetStringValue = shiftResultCircle.dataValue.toString();
+          
+          if (offsetStringValue.startsWith('0x')) {
+            offsetValue = parseInt(offsetStringValue, 16);
+          } else if (offsetStringValue.startsWith('0b')) {
+            offsetValue = parseInt(offsetStringValue.slice(2), 2);
+          } else {
+            offsetValue = parseInt(offsetStringValue, 10);
+          }
+          
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          
+          console.log(`🔧 Branch Address Calculation:`);
+          console.log(`   - PC Value (D_PC_Branch): ${pcStringValue} → ${pcValue}`);
+          console.log(`   - Shifted Offset (D_Shift_Result): ${offsetStringValue} → ${offsetValue}`);
+          console.log(`   - Instruction Format: ${instructionFormat}`);
+          
+          // Perform branch address calculation: PC + offset
+          const branchTargetAddress = pcValue + offsetValue;
+          
+          console.log(`   - Calculation: ${pcValue} + ${offsetValue} = ${branchTargetAddress}`);
+          console.log(`   - Branch Target Address: 0x${branchTargetAddress.toString(16).toUpperCase().padStart(8, '0')}`);
+          
+          // Format result as hex address
+          resolvedData = `0x${branchTargetAddress.toString(16).toUpperCase().padStart(8, '0')}`;
+          
+          console.log(`✅ Branch Address Calculation Result: ${resolvedData}`);
+        } else {
+          console.error('🔴 BRANCH ADDRESS CALCULATION: Missing required circles');
+          console.error(`pcBranchCircle: ${pcBranchCircle?.id}, shiftResultCircle: ${shiftResultCircle?.id}`);
+          // Fallback to default address
+          resolvedData = '0x00000000';
+        }
+      }
+      
+      // Special case: ZeroAND Gate Logic
+      if (operation.targetComponent === 'ZeroAND' && 
+          operation.sourceCircleIds.includes('D_ALU_Result_Zero') && 
+          operation.sourceCircleIds.includes('C_ZeroBranch')) {
+        
+        console.log('🎯 IMPLEMENTING ZEROAND GATE LOGIC');
+        
+        // Find the required circles for ZeroAND gate operation
+        const zeroFlagCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Zero');
+        const zeroBranchCircle = sourceCircles.find(c => c.id === 'C_ZeroBranch');
+        
+        if (zeroFlagCircle && zeroBranchCircle) {
+          // Parse the Zero flag (1 if ALU result was 0, else 0)
+          const zeroFlagValue = parseInt(zeroFlagCircle.dataValue.toString(), 10);
+          
+          // Parse the ZeroBranch control signal (1 for conditional branch instructions, else 0)
+          const zeroBranchValue = parseInt(zeroBranchCircle.dataValue.toString(), 10);
+          
+          console.log(`🔧 ZeroAND Gate Logic:`);
+          console.log(`   - D_ALU_Result_Zero (Zero flag): ${zeroFlagValue}`);
+          console.log(`   - C_ZeroBranch (control signal): ${zeroBranchValue}`);
+          
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Perform logical AND operation
+          // Output is 1 only if both:
+          // 1. The instruction is a conditional branch (C_ZeroBranch=1)
+          // 2. The branch condition is met (D_ALU_Result_Zero=1 for CBZ, or other logic for CBNZ)
+          const andResult = zeroFlagValue & zeroBranchValue;
+          
+          resolvedData = andResult.toString();
+          
+          console.log(`✅ ZeroAND Gate Result: ${zeroFlagValue} AND ${zeroBranchValue} = ${resolvedData}`);
+          
+          if (instructionFormat === 'CB' || instructionFormat === 'CB-TYPE') {
+            if (andResult === 1) {
+              console.log(`✅ Conditional branch condition MET for ${instructionFormat}-format instruction`);
+            } else {
+              console.log(`✅ Conditional branch condition NOT MET for ${instructionFormat}-format instruction`);
+            }
+          }
+        } else {
+          console.error('🔴 ZEROAND GATE MERGE: Missing required circles');
+          console.error(`zeroFlagCircle: ${zeroFlagCircle?.id}, zeroBranchCircle: ${zeroBranchCircle?.id}`);
+        }
+      }
+      
+      // Special case: BranchOR Gate Logic
+      if (operation.targetComponent === 'BranchOR' && 
+          operation.sourceCircleIds.includes('C_UncondBranch') && 
+          operation.sourceCircleIds.includes('D_Branch_0')) {
+        
+        console.log('🎯 IMPLEMENTING BRANCHOR GATE LOGIC');
+        
+        // Find the required circles for BranchOR gate operation
+        const uncondBranchCircle = sourceCircles.find(c => c.id === 'C_UncondBranch');
+        const branch0Circle = sourceCircles.find(c => c.id === 'D_Branch_0');
+        
+        if (uncondBranchCircle && branch0Circle) {
+          // Step 1: Check for unconditional branch (B, BL, BR)
+          const isUnconditionalBranch = parseInt(uncondBranchCircle.dataValue.toString());
+          
+          // Step 2: Get the result from the CBZ/CBNZ logic (ZeroAND gate)
+          const isZeroBranchTaken = parseInt(branch0Circle.dataValue.toString());
+          
+          console.log(`🔧 BranchOR Gate Logic:`);
+          console.log(`   - C_UncondBranch: ${isUnconditionalBranch} (unconditional branch)`);
+          console.log(`   - D_Branch_0: ${isZeroBranchTaken} (CBZ/CBNZ result)`);
+          
+          // Step 3: Calculate if a B.cond branch is taken
+          let isFlagBranchTaken = 0;
+          
+          // Get instruction format and name from machine code breakdown
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+          
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          console.log(`🔧 Instruction name: ${instructionName}`);
+          
+          // Check if this is a flag-based conditional branch (B.cond instructions)
+          if (instructionName && instructionName.startsWith('B.') && instructionName.length > 2) {
+            console.log('🎯 Detected B.cond instruction, checking PSTATE flags');
+            
+            // Get current PSTATE flags from CPU state
+            if (this.cpuState?.flags) {
+              const PSTATE = {
+                N: this.cpuState.flags.negative ? 1 : 0,
+                Z: this.cpuState.flags.zero ? 1 : 0,
+                V: this.cpuState.flags.overflow ? 1 : 0,
+                C: this.cpuState.flags.carry ? 1 : 0
+              };
+              
+              console.log(`🚩 Current PSTATE flags: N=${PSTATE.N}, Z=${PSTATE.Z}, V=${PSTATE.V}, C=${PSTATE.C}`);
+              
+              // Extract condition code from instruction name (e.g., "B.EQ" -> "EQ")
+              const conditionCode = instructionName.substring(2);
+              console.log(`🔍 Condition code: ${conditionCode}`);
+              
+              // Implement condition checking logic based on ARM64 specifications
+              switch (conditionCode) {
+                case 'EQ': isFlagBranchTaken = (PSTATE.Z === 1) ? 1 : 0; break;        // Z = 1
+                case 'NE': isFlagBranchTaken = (PSTATE.Z === 0) ? 1 : 0; break;        // Z = 0
+                case 'MI': isFlagBranchTaken = (PSTATE.N === 1) ? 1 : 0; break;        // N = 1
+                case 'PL': isFlagBranchTaken = (PSTATE.N === 0) ? 1 : 0; break;        // N = 0
+                case 'VS': isFlagBranchTaken = (PSTATE.V === 1) ? 1 : 0; break;        // V = 1
+                case 'VC': isFlagBranchTaken = (PSTATE.V === 0) ? 1 : 0; break;        // V = 0
+                case 'HI': isFlagBranchTaken = (PSTATE.C === 1 && PSTATE.Z === 0) ? 1 : 0; break; // C = 1 & Z = 0
+                case 'LS': isFlagBranchTaken = !(PSTATE.C === 1 && PSTATE.Z === 0) ? 1 : 0; break; // ~(C = 1 & Z = 0)
+                case 'GE': isFlagBranchTaken = (PSTATE.N === PSTATE.V) ? 1 : 0; break; // N = V
+                case 'LT': isFlagBranchTaken = (PSTATE.N !== PSTATE.V) ? 1 : 0; break; // N != V
+                case 'GT': isFlagBranchTaken = (PSTATE.Z === 0 && PSTATE.N === PSTATE.V) ? 1 : 0; break; // Z = 0 & N = V
+                case 'LE': isFlagBranchTaken = !(PSTATE.Z === 0 && PSTATE.N === PSTATE.V) ? 1 : 0; break; // ~(Z = 0 & N = V)
+                case 'HS': isFlagBranchTaken = (PSTATE.C === 1) ? 1 : 0; break;        // HS is alias for CS (C = 1)
+                case 'LO': isFlagBranchTaken = (PSTATE.C === 0) ? 1 : 0; break;        // LO is alias for CC (C = 0)
+                case 'AL': isFlagBranchTaken = 1; break;                               // Always
+                default:
+                  console.warn(`⚠️ Unknown condition code: ${conditionCode}`);
+                  isFlagBranchTaken = 0;
+                  break;
+              }
+              
+              console.log(`✅ B.${conditionCode} condition evaluation: ${isFlagBranchTaken ? 'TAKEN' : 'NOT TAKEN'}`);
+            } else {
+              console.warn('⚠️ CPU state flags not available for B.cond evaluation');
+              isFlagBranchTaken = 0;
+            }
+          } else {
+            console.log('🔧 Not a B.cond instruction, isFlagBranchTaken = 0');
+          }
+          
+          // Step 4: Perform the final OR operation
+          // Result is 1 if ANY type of branch should be taken
+          const branchOrResult = isUnconditionalBranch || isZeroBranchTaken || isFlagBranchTaken;
+          
+          resolvedData = branchOrResult.toString();
+          
+          console.log(`🔧 BranchOR Calculation:`);
+          console.log(`   - Unconditional Branch: ${isUnconditionalBranch}`);
+          console.log(`   - Zero Branch Taken: ${isZeroBranchTaken}`);
+          console.log(`   - Flag Branch Taken: ${isFlagBranchTaken}`);
+          console.log(`   - Final OR Result: ${branchOrResult}`);
+          console.log(`✅ BranchOR Gate Result: ${resolvedData} (${branchOrResult ? 'BRANCH TAKEN' : 'BRANCH NOT TAKEN'})`);
+          
+        } else {
+          console.error('🔴 BRANCHOR GATE MERGE: Missing required circles');
+          console.error(`uncondBranchCircle: ${uncondBranchCircle?.id}, branch0Circle: ${branch0Circle?.id}`);
+          // Fallback to default value
+          resolvedData = '0';
+        }
+      }
+      
+      // Special case: MuxPC - Final PC value selection (sequential vs branch)
+      if (operation.targetComponent === 'MuxPC' && 
+          operation.sourceCircleIds.includes('D_PC_Plus_4') && 
+          operation.sourceCircleIds.includes('D_Branch_Addr_Result') && 
+          operation.sourceCircleIds.includes('D_Branch_1')) {
+        
+        console.log('🎯 IMPLEMENTING MUXPC FINAL PC SELECTION LOGIC');
+        
+        // Find the required circles for PC multiplexer selection
+        const pcPlus4Circle = sourceCircles.find(c => c.id === 'D_PC_Plus_4');
+        const branchAddrCircle = sourceCircles.find(c => c.id === 'D_Branch_Addr_Result');
+        const branchSelectorCircle = sourceCircles.find(c => c.id === 'D_Branch_1');
+        
+        if (pcPlus4Circle && branchAddrCircle && branchSelectorCircle) {
+          // Get the dataValues from the source circles
+          const pcPlus4Value = pcPlus4Circle.dataValue.toString();
+          const branchTargetValue = branchAddrCircle.dataValue.toString();
+          const selectorValue = branchSelectorCircle.dataValue.toString();
+          
+          console.log(`🔧 MuxPC Final PC Selection:`);
+          console.log(`   - D_PC_Plus_4: ${pcPlus4Value} (sequential address)`);
+          console.log(`   - D_Branch_Addr_Result: ${branchTargetValue} (branch target address)`);
+          console.log(`   - D_Branch_1: ${selectorValue} (selector signal)`);
+          
+          // Get instruction format and name from machine code breakdown
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+          
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          console.log(`🔧 Instruction name: ${instructionName}`);
+          
+          let nextPCValue: string;
+          
+          // Special case for BR instruction: The branch target comes directly from register value
+          if (instructionName === 'BR') {
+            // For BR instructions, the selector will be 1, so this will always be chosen
+            nextPCValue = branchTargetValue;
+            console.log(`✅ BR instruction: Using register value as next PC = ${nextPCValue}`);
+          } else {
+            // Standard Mux logic for all other instructions
+            if (selectorValue === '1') {
+              // Branch is being taken
+              nextPCValue = branchTargetValue;
+              console.log(`✅ Branch taken: Next PC = ${nextPCValue} (branch target)`);
+            } else {
+              // No branch is being taken - continue sequentially
+              nextPCValue = pcPlus4Value;
+              console.log(`✅ Branch not taken: Next PC = ${nextPCValue} (sequential)`);
+            }
+          }
+          
+          // Assign the final result
+          resolvedData = nextPCValue;
+          
+          console.log(`🔧 Final MuxPC Selection Result: ${resolvedData}`);
+          console.log(`✅ Next instruction will be fetched from address: ${resolvedData}`);
+          
+        } else {
+          console.error('🔴 MUXPC MERGE: Missing required circles');
+          console.error(`pcPlus4Circle: ${pcPlus4Circle?.id}, branchAddrCircle: ${branchAddrCircle?.id}, branchSelectorCircle: ${branchSelectorCircle?.id}`);
+          // Fallback to sequential address if available
+          const fallbackPcCircle = sourceCircles.find(c => c.id === 'D_PC_Plus_4');
+          if (fallbackPcCircle) {
+            resolvedData = fallbackPcCircle.dataValue.toString();
+            console.log(`🔧 Fallback: Using sequential PC = ${resolvedData}`);
+          } else {
+            resolvedData = '0x00000000';
+          }
+        }
+      }
+      
+      // Special case: DataMem Memory Write Operation
+      // Memory Read Operation
+      else if (operation.targetComponent === 'DataMem' && 
+          operation.sourceCircleIds.includes('D_RegRead2_Val_DataMem') && 
+          operation.sourceCircleIds.includes('C_MemRead')) {
+        
+        console.log('🎯 IMPLEMENTING DATAMEM MEMORY READ OPERATION');
+        
+        // Find the required circles for memory read operation
+        const memAddressCircle = sourceCircles.find(c => c.id === 'D_RegRead2_Val_DataMem');
+        const memReadCircle = sourceCircles.find(c => c.id === 'C_MemRead');
+        
+        if (memAddressCircle && memReadCircle) {
+          const memReadValue = memReadCircle.dataValue.toString();
+          const memAddress = parseInt(memAddressCircle.dataValue.toString());
+          
+          console.log(`🔧 Memory Read Operation:`);
+          console.log(`   - C_MemRead: ${memReadValue} (control signal)`);
+          console.log(`   - D_ALU_Result_Mem: ${memAddress} (memory address)`);
+          
+          // Get instruction name from machine code breakdown
+          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+          console.log(`🔧 Instruction name: ${instructionName}`);
+          
+          // Implement memory read logic based on C_MemRead control signal
+          if (memReadValue === '1') {
+            // Access the simulated data memory from CPU state
+            const readValue = this.cpuState?.dataMemory?.get(memAddress) || 0;
+            console.log(`🔧 Raw read value from memory[${memAddress}]: ${readValue}`);
+            
+            // Apply instruction-specific extension based on load instruction type
+            let finalValue = readValue;
+            switch (instructionName) {
+              case 'LDURB':
+                // Zero-extend byte to 64 bits
+                finalValue = readValue & 0xFF;
+                console.log(`🔧 LDURB: Zero-extending byte ${readValue} to ${finalValue}`);
+                break;
+              case 'LDURH':
+                // Zero-extend half-word to 64 bits
+                finalValue = readValue & 0xFFFF;
+                console.log(`🔧 LDURH: Zero-extending half-word ${readValue} to ${finalValue}`);
+                break;
+              case 'LDURSW':
+                // Sign-extend 32-bit word to 64 bits
+                const word = readValue & 0xFFFFFFFF;
+                const isNegative = (word >> 31) & 1;
+                if (isNegative) {
+                  // Sign extend for negative numbers
+                  finalValue = word | (~0xFFFFFFFF);
+                } else {
+                  finalValue = word;
+                }
+                console.log(`🔧 LDURSW: Sign-extending 32-bit word ${readValue} to ${finalValue}`);
+                break;
+              case 'LDUR':
+                // No extension needed for 64-bit load
+                finalValue = readValue;
+                console.log(`🔧 LDUR: 64-bit load, no extension needed: ${finalValue}`);
+                break;
+              default:
+                finalValue = readValue;
+                console.log(`🔧 Default: Using raw value: ${finalValue}`);
+                break;
+            }
+            
+            resolvedData = finalValue.toString();
+            console.log(`✅ MemRead=1: Read data ${resolvedData} from memory address ${memAddress}`);
+          } else {
+            // MemRead = 0, no memory read operation - return 0 as default
+            resolvedData = 'NOT_DO_ANYTHING';
+            console.log(`✅ MemRead=0: No memory read operation`);
+          }
+        } else {
+          console.error('🔴 DATAMEM MEMORY READ: Missing required circles');
+          console.error(`memAddressCircle: ${memAddressCircle?.id}, memReadCircle: ${memReadCircle?.id}`);
+          // Fallback to default value
+          resolvedData = '0';
+        }
+      }
+      // Memory Write Operation
+      else if (operation.targetComponent === 'DataMem' && 
+          operation.sourceCircleIds.includes('D_DataMem_Addr_Ready') && 
+          operation.sourceCircleIds.includes('C_MemWrite') && 
+          operation.sourceCircleIds.includes('D_ALU_Result_Mem')) {
+        
+        console.log('🎯 IMPLEMENTING DATAMEM MEMORY WRITE OPERATION');
+        
+        // Find the required circles for memory write operation
+        const memAddrCircle = sourceCircles.find(c => c.id === 'D_DataMem_Addr_Ready');
+        const memWriteCircle = sourceCircles.find(c => c.id === 'C_MemWrite');
+        const aluResultCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mem');
+        
+        if (memAddrCircle && memWriteCircle && aluResultCircle) {
+          const memWriteValue = memWriteCircle.dataValue.toString();
+          const memAddress = memAddrCircle.dataValue.toString();
+          const writeData = aluResultCircle.dataValue.toString();
+          
+          console.log(`🔧 Memory Write Operation:`);
+          console.log(`   - C_MemWrite: ${memWriteValue} (control signal)`);
+          console.log(`   - D_DataMem_Addr_Ready: ${memAddress} (memory address)`);
+          console.log(`   - D_ALU_Result_Mem: ${writeData} (data to write)`);
+          
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Implement memory write logic based on C_MemWrite control signal
+          if (memWriteValue === '1') {
+            // Create an announcement for memory write operation
+            resolvedData = `WRITE_TO_MEM[${memAddress}]=${writeData}`;
+            console.log(`✅ MemWrite=1: Writing data ${writeData} to memory address ${memAddress}`);
+            console.log(`✅ Memory Write Operation: ${resolvedData}`);
+            
+            // This will create a temporary visual indicator that will disappear after 100ms
+            // The actual memory write operation would be handled by the CPU state
+          } else {
+            // MemWrite = 0, no memory write operation
+            resolvedData = 'NO_MEMORY_WRITE';
+            console.log(`✅ MemWrite=0: No memory write operation for ${instructionFormat}-format instruction`);
+          }
+        } else {
+          console.error('🔴 DATAMEM MEMORY WRITE: Missing required circles');
+          console.error(`memAddrCircle: ${memAddrCircle?.id}, memWriteCircle: ${memWriteCircle?.id}, aluResultCircle: ${aluResultCircle?.id}`);
+          // Fallback to default value
+          resolvedData = 'NO_MEMORY_OPERATION';
+        }
+      }
+      
+      // Special case: MuxReadMem - Write-back value selection
+      if (operation.targetComponent === 'MuxReadMem' && 
+          operation.sourceCircleIds.includes('D_DataMem_read') && 
+          operation.sourceCircleIds.includes('C_MemToReg') && 
+          operation.sourceCircleIds.includes('D_ALU_Result_Mux')) {
+        
+        console.log('🎯 IMPLEMENTING MUXREADMEM MULTIPLEXER LOGIC');
+        
+        // Find the control signal and data values
+        const memToRegCircle = sourceCircles.find(c => c.id === 'C_MemToReg');
+        const aluResultCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mux');
+        const memDataCircle = sourceCircles.find(c => c.id === 'D_DataMem_read');
+        
+        if (memToRegCircle && aluResultCircle && memDataCircle) {
+          const memToRegValue = memToRegCircle.dataValue.toString();
+          
+          console.log(`🔧 C_MemToReg = ${memToRegValue} (control signal)`);
+          console.log(`🔧 D_ALU_Result_Mux = ${aluResultCircle.dataValue} (from ALU)`);
+          console.log(`🔧 D_DataMem_read = ${memDataCircle.dataValue} (from Memory)`);
+          
+          // Get the instruction format to determine the logic
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          
+          // Implement multiplexer logic based on C_MemToReg control signal
+          if (memToRegValue === '0') {
+            // Select the result from the ALU
+            // Applies to: R-Format, I-Format, MOVZ, MOVK
+            resolvedData = aluResultCircle.dataValue.toString();
+            console.log(`✅ MemToReg=0: Selected ALU result = ${resolvedData} (R-Format/I-Format/MOVZ/MOVK)`);
+          } else { // memToRegValue === '1'
+            // Select the result from Data Memory
+            // Applies to: LDUR, LDURB, LDURH, LDURSW
+            // If D_DataMem_read was not created (e.g., in a STUR), its value would be null.
+            // The control signals ensure this path is only taken when a read actually happened.
+            resolvedData = memDataCircle.dataValue.toString();
+            console.log(`✅ MemToReg=1: Selected Memory data = ${resolvedData} (LDUR/LDURB/LDURH/LDURSW)`);
+          }
+        } else {
+          console.error('🔴 MUXREADMEM MERGE: Missing required circles');
+          console.error(`memToRegCircle: ${memToRegCircle?.id}, aluResultCircle: ${aluResultCircle?.id}, memDataCircle: ${memDataCircle?.id}`);
+          // Fallback to ALU result if memory control signals are missing
+          const fallbackAluCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mux');
+          if (fallbackAluCircle) {
+            resolvedData = fallbackAluCircle.dataValue.toString();
+            console.log(`🔧 Fallback: Using ALU result = ${resolvedData}`);
+          } else {
+            resolvedData = 'UNKNOWN_WRITEBACK_VALUE';
+          }
+        }
+      }
+      
+      // Special case: RegFile Write Commit Operation
+      if (operation.targetComponent === 'RegFile' && 
+          operation.sourceCircleIds.includes('D_Write_Addr_Idx') && 
+          operation.sourceCircleIds.includes('C_RegWrite') && 
+          operation.sourceCircleIds.includes('D_RegFile_Write')) {
+        
+        console.log('🎯 IMPLEMENTING REGFILE WRITE COMMIT OPERATION');
+        
+        // Find the required circles for register file write operation
+        const writeAddrCircle = sourceCircles.find(c => c.id === 'D_Write_Addr_Idx');
+        const regWriteCircle = sourceCircles.find(c => c.id === 'C_RegWrite');
+        const regFileWriteCircle = sourceCircles.find(c => c.id === 'D_RegFile_Write');
+        
+        if (writeAddrCircle && regWriteCircle && regFileWriteCircle) {
+          const regWriteValue = regWriteCircle.dataValue.toString();
+          const writeAddress = writeAddrCircle.dataValue.toString();
+          const writeData = regFileWriteCircle.dataValue.toString();
+          
+          console.log(`🔧 RegFile Write Commit Operation:`);
+          console.log(`   - C_RegWrite: ${regWriteValue} (control signal)`);
+          console.log(`   - D_Write_Addr_Idx: ${writeAddress} (register address)`);
+          console.log(`   - D_RegFile_Write: ${writeData} (data to write)`);
+          
+          // Get instruction format for context
+          const instructionFormat = this.machineCodeBreakdown?.format;
+          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+          console.log(`🔧 Instruction format: ${instructionFormat}`);
+          console.log(`🔧 Instruction name: ${instructionName}`);
+          
+          // Implement register write logic based on C_RegWrite control signal
+          if (regWriteValue === '1') {
+            // This is an ACTION that updates the Register File's state
+            resolvedData = `WRITE_TO_REG[X${writeAddress}]=${writeData}`;
+            console.log(`✅ RegWrite=1: Writing data ${writeData} to register ${writeAddress}`);
+            console.log(`✅ Register Write Operation: ${resolvedData}`);
+            
+            // This creates a temporary visual indicator that represents the write action
+            // The actual register file update would be handled by the CPU state
+          } else {
+            // RegWrite = 0, no register write operation
+            // This applies to: STUR, B, CBZ, CMP, NOP, BR
+            resolvedData = 'NOT_WRITE_ANYTHING';
+            console.log(`✅ RegWrite=0: No register write operation for ${instructionName || instructionFormat}-format instruction`);
+          }
+        } else {
+          console.error('🔴 REGFILE WRITE COMMIT: Missing required circles');
+          console.error(`writeAddrCircle: ${writeAddrCircle?.id}, regWriteCircle: ${regWriteCircle?.id}, regFileWriteCircle: ${regFileWriteCircle?.id}`);
+          // Fallback to default value
+          resolvedData = 'NO_REGISTER_WRITE';
         }
       }
       
@@ -892,7 +1819,8 @@ export class InstructionAnimationController {
         this.callbacks.onCircleDestroy(circle.id);
       });
     }
-  }  /**   * Execute transform operation: circle changes its data content   */  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+  }  /**   * Execute transform operation: circle changes its data content   */  
+  private async executeTransformOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
     console.log('=== TRANSFORM OPERATION DEBUG ===');
     console.log('Operation:', operation);
     console.log('Requested sourceCircleIds:', operation.sourceCircleIds);
@@ -1057,12 +1985,59 @@ export class InstructionAnimationController {
               }
             }
             break;
+          case 'D_SHIFT_RESULT':
+            console.log('🎯 IMPLEMENTING SHIFT LEFT 2 OPERATION');
+        
+            // Get the immediate value to shift
+            let immediateValue: number;
+            const sourceValue = sourceCircle.dataValue.toString();
             
-          default:
-            // Keep the resolved value from result.dataValue
+            console.log(`🔧 Source immediate value: ${sourceValue}`);
+            
+            // Parse the immediate value - handle different formats
+            if (sourceValue.startsWith('0x')) {
+              immediateValue = parseInt(sourceValue, 16);
+            } else if (sourceValue.startsWith('0b')) {
+              immediateValue = parseInt(sourceValue.slice(2), 2);
+            } else if (/^-?\d+$/.test(sourceValue)) {
+              immediateValue = parseInt(sourceValue, 10);
+            } else {
+              // Try to parse as binary string (for sign-extended immediate)
+              immediateValue = parseInt(sourceValue, 2);
+              // Handle two's complement for negative values if needed
+              if (sourceValue.length > 0 && sourceValue[0] === '1' && sourceValue.length <= 32) {
+                const bitLength = sourceValue.length;
+                immediateValue = immediateValue - Math.pow(2, bitLength);
+              }
+            }
+            
+            // Get instruction format for context
+            const instructionFormat = this.machineCodeBreakdown?.format;
+            console.log(`🔧 Instruction format: ${instructionFormat}`);
+            
+            // Perform left shift by 2 (multiply by 4 for word-to-byte address conversion)
+            const shiftedValue = immediateValue << 2;
+            
+            console.log(`🔧 Shift Left 2 Operation:`);
+            console.log(`   - Original immediate: ${immediateValue} (0x${immediateValue.toString(16)})`);
+            console.log(`   - Shifted left by 2: ${shiftedValue} (0x${shiftedValue.toString(16)})`);
+            console.log(`   - This converts word offset to byte offset for ${instructionFormat}-format instruction`);
+            
+            // Update the new value with the shifted result
+            newValue = shiftedValue.toString();
+            console.log(`✅ ShiftLeft2 Result: ${newValue}`);
             break;
-        }
-      }
+          case 'D_DATAMEM_ADDR_READY':
+            // Data memory address ready - use the source circle's value directly
+            newValue = sourceCircle.dataValue.toString();
+            console.log(`🎯 Transform resolved D_DataMem_Addr_Ready to: ${newValue}`);
+            break;
+                
+            default:
+                // Keep the resolved value from result.dataValue
+                break;
+            }
+          }
     }
       console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
 
