@@ -1,5 +1,5 @@
 // Enhanced AnimationCircle component for multi-circle CPU animation
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { DataCircle, Point } from '../../types/animationTypes';
 
@@ -36,57 +36,36 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
 }) => {
   const circleRef = useRef<SVGGElement>(null);
   const animationRef = useRef<gsap.core.Timeline | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Check if data needs truncation (more than 12 characters)
+  const needsTruncation = (value: string | number): boolean => {
+    return value.toString().length > 12;
+  };
 
   // Calculate rectangle dimensions and format display text together
-  const getDisplayTextAndDimensions = (value: string | number) => {
+  const getDisplayTextAndDimensions = (value: string | number, showFull: boolean = false) => {
     const str = value.toString();
+    const shouldShowFull = showFull || isExpanded || isHovered;
+    
+    // Determine display text based on truncation logic
+    let displayText = str;
+    if (needsTruncation(value) && !shouldShowFull) {
+      displayText = str.slice(0, 12); // Show only first 12 characters
+    }
+    
     const charWidth = 7; // Average character width in pixels for 10px monospace font
     const padding = 16; // Horizontal padding
     const minWidth = 30; // Minimum width
-    const maxWidth = 350; // Much more generous maximum width
     const height = 20; // Fixed height
     
-    // Calculate full text width first
-    const fullTextWidth = str.length * charWidth + padding;
-    
-    // Be much more generous - only truncate for extremely long strings
-    if (fullTextWidth <= maxWidth || str.length <= 40) {
-      const width = Math.max(minWidth, fullTextWidth);
-      return { 
-        displayText: str, 
-        width, 
-        height 
-      };
-    }
-    
-    // Only truncate if absolutely necessary (very long strings)
-    let truncatedText = str;
-    
-    if (str.startsWith('0x')) {
-      // For hex values, be very generous - only truncate if extremely long
-      if (str.length > 35) {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    } else if (str.includes(' ')) {
-      // For instructions, prefer first word but allow longer if reasonable
-      const firstWord = str.split(' ')[0];
-      if (firstWord.length <= 35) {
-        truncatedText = firstWord;
-      } else {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    } else {
-      // For binary strings and other data, be very generous
-      if (str.length > 35) {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    }
-    
-    const width = Math.max(minWidth, truncatedText.length * charWidth + padding);
+    const width = Math.max(minWidth, displayText.length * charWidth + padding);
     return { 
-      displayText: truncatedText, 
+      displayText, 
       width, 
-      height 
+      height,
+      isTruncated: needsTruncation(value) && !shouldShowFull
     };
   };
 
@@ -153,7 +132,8 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
     return null;
   }
 
-  const { displayText, width, height } = getDisplayTextAndDimensions(circle.dataValue);
+  const { displayText, width, height, isTruncated } = getDisplayTextAndDimensions(circle.dataValue);
+  const fullText = circle.dataValue.toString();
   const textColor = getTextColor(circle.color);
 
   return (
@@ -161,6 +141,14 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
       ref={circleRef}
       transform={`translate(${circle.position.x}, ${circle.position.y})`}
       opacity={circle.opacity}
+      style={{ cursor: isTruncated ? 'pointer' : 'default' }}
+      onClick={() => {
+        if (isTruncated) {
+          setIsExpanded(!isExpanded);
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Rectangle background */}
       <rect
@@ -189,7 +177,52 @@ export const EnhancedDataCircle: React.FC<DataCircleProps> = ({
       >
         {displayText}
       </text>
-        {/* Optional type indicator */}
+      
+      {/* Tooltip for full data when hovering over truncated data */}
+      {isHovered && isTruncated && !isExpanded && (
+        <g>
+          <rect
+            x={-fullText.length * 3.5}
+            y={-height / 2 - 25}
+            width={fullText.length * 7 + 8}
+            height={16}
+            fill="#000"
+            stroke="#666"
+            strokeWidth={1}
+            rx={2}
+            ry={2}
+            opacity={0.9}
+          />
+          <text
+            x={0}
+            y={-height / 2 - 17}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#FFF"
+            fontSize="9px"
+            fontFamily="monospace"
+          >
+            {fullText}
+          </text>
+        </g>
+      )}
+      
+      {/* Indicator for truncated data */}
+      {isTruncated && !isExpanded && (
+        <text
+          x={width / 2 - 8}
+          y={0}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#FFA500"
+          fontSize="8px"
+          fontWeight="bold"
+        >
+          ...
+        </text>
+      )}
+      
+      {/* Optional type indicator */}
       {width > 30 && (
         <text
           x={0}
@@ -219,62 +252,43 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
   color = '#10B981',
   opacity = 1,
   showText = true
-}) => {  const circleRef = useRef<SVGRectElement>(null);
+}) => {
+  const circleRef = useRef<SVGRectElement>(null);
   const textRef = useRef<SVGTextElement>(null);
   const animationRef = useRef<gsap.core.Timeline | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Check if data needs truncation (more than 8 characters)
+  const needsTruncation = (value: string | number): boolean => {
+    if (!value) return false;
+    return value.toString().length > 8;
+  };
 
   // Calculate dimensions and format display text
-  const getDisplayTextAndDimensions = () => {
-    if (!dataValue || !showText) return { displayText: '', width: 30, height: 20 };
+  const getDisplayTextAndDimensions = (showFull: boolean = false) => {
+    if (!dataValue || !showText) return { displayText: '', width: 30, height: 20, isTruncated: false };
     
     const str = dataValue.toString();
+    const shouldShowFull = showFull || isExpanded || isHovered;
+    
+    // Determine display text based on truncation logic
+    let displayText = str;
+    if (needsTruncation(dataValue) && !shouldShowFull) {
+      displayText = str.slice(0, 8); // Show only first 8 characters
+    }
+    
     const charWidth = 7; // Average character width in pixels for 10px monospace font
     const padding = 16; // Horizontal padding
     const minWidth = 30; // Minimum width
-    const maxWidth = 350; // Much more generous maximum width
     const height = 20; // Fixed height
     
-    // Calculate full text width first
-    const fullTextWidth = str.length * charWidth + padding;
-    
-    // Be much more generous - only truncate for extremely long strings
-    if (fullTextWidth <= maxWidth || str.length <= 40) {
-      const width = Math.max(minWidth, fullTextWidth);
-      return { 
-        displayText: str, 
-        width, 
-        height 
-      };
-    }
-    
-    // Only truncate if absolutely necessary (very long strings)
-    let truncatedText = str;
-    
-    if (str.startsWith('0x')) {
-      // For hex values, be very generous - only truncate if extremely long
-      if (str.length > 35) {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    } else if (str.includes(' ')) {
-      // For instructions, prefer first word but allow longer if reasonable
-      const firstWord = str.split(' ')[0];
-      if (firstWord.length <= 35) {
-        truncatedText = firstWord;
-      } else {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    } else {
-      // For binary strings and other data, be very generous
-      if (str.length > 35) {
-        truncatedText = `${str.slice(0, 32)}...`;
-      }
-    }
-    
-    const width = Math.max(minWidth, truncatedText.length * charWidth + padding);
+    const width = Math.max(minWidth, displayText.length * charWidth + padding);
     return { 
-      displayText: truncatedText, 
+      displayText, 
       width, 
-      height 
+      height,
+      isTruncated: needsTruncation(dataValue) && !shouldShowFull
     };
   };
 
@@ -346,11 +360,21 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
     return null;
   }
   
-  const { displayText, width, height } = getDisplayTextAndDimensions();
+  const { displayText, width, height, isTruncated } = getDisplayTextAndDimensions();
+  const fullText = dataValue ? dataValue.toString() : '';
   const textColor = color === '#EF4444' || color === '#3B82F6' || color === '#8B5CF6' ? '#FFFFFF' : '#000000';
 
   return (
-    <g>
+    <g
+      style={{ cursor: isTruncated ? 'pointer' : 'default' }}
+      onClick={() => {
+        if (isTruncated) {
+          setIsExpanded(!isExpanded);
+        }
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <rect
         ref={circleRef}
         x={-width / 2}
@@ -377,6 +401,51 @@ const AnimationCircle: React.FC<AnimatedCircleProps> = ({
           style={{ opacity: 0 }}
         >
           {displayText}
+        </text>
+      )}
+      
+      {/* Tooltip for full data when hovering over truncated data */}
+      {isHovered && isTruncated && !isExpanded && (
+        <g style={{ opacity: 1 }}>
+          <rect
+            x={-fullText.length * 3.5}
+            y={-height / 2 - 25}
+            width={fullText.length * 7 + 8}
+            height={16}
+            fill="#000"
+            stroke="#666"
+            strokeWidth={1}
+            rx={2}
+            ry={2}
+            opacity={0.9}
+          />
+          <text
+            x={0}
+            y={-height / 2 - 17}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#FFF"
+            fontSize="9px"
+            fontFamily="monospace"
+          >
+            {fullText}
+          </text>
+        </g>
+      )}
+      
+      {/* Indicator for truncated data */}
+      {isTruncated && !isExpanded && (
+        <text
+          x={width / 2 - 8}
+          y={0}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#FFA500"
+          fontSize="8px"
+          fontWeight="bold"
+          style={{ opacity: 1 }}
+        >
+          ...
         </text>
       )}
     </g>

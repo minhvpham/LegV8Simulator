@@ -10,19 +10,19 @@ export const ALUMAIN_TO_DATAMEM_PATH = {
   endComponent: 'DataMem',
   stage: 'MEM',
   wireType: 'data',
-  verified: true, // Exists in CPUDatapath.tsx line 1009-1013
+  verified: true, // Exists in CPUDatapath.tsx line 1189-1193
   
   // Function that returns actual coordinates using real components and verticalLines from CPUDatapath.tsx
   getPathPoints: (components: any, verticalLines: any) => {
-    // These are the EXACT same calculations used in CPUDatapath.tsx lines 1009-1013
+    // These are the EXACT same calculations used in CPUDatapath.tsx lines 1189-1193
     return [
       { 
         x: components.ALUMain.x + components.ALUMain.width, 
-        y: components.DataMem.y + components.DataMem.height/3 
+        y: components.ALUMain.y + 5*components.ALUMain.height/8 
       },
       { 
         x: components.DataMem.x, 
-        y: components.DataMem.y + components.DataMem.height/3 
+        y: components.ALUMain.y + 5*components.ALUMain.height/8 
       }
     ];
   }
