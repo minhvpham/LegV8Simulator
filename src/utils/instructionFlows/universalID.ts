@@ -101,7 +101,7 @@ export const UNIVERSAL_ID_STAGE: StageDataFlow = {
         },
         {
           id: 'D_Imm',
-          dataValue: 'INSTRUCTION_FIELD_31_0', // Full instruction [31-0] for immediate
+          dataValue: 'INSTRUCTION_IMMEDIATE_FIELD', // Extracted immediate field based on format
           dataType: 'immediate_field',
           targetComponent: 'SignExtend',
           wirePath: INSMEM_TO_SIGNEXTEND_PATH

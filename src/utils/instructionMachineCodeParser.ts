@@ -3,7 +3,7 @@ import { Instruction } from '../types';
 
 export interface InstructionFormat {
   mnemonic: string;
-  format: 'R' | 'I' | 'D' | 'IM' | 'B' | 'C';
+  format: 'R' | 'I' | 'D' | 'IM' | 'B' | 'CB';
   opcode: string;
   rec2Loc: string;
   uncondBranch: string;
@@ -103,22 +103,22 @@ const INSTRUCTION_FORMATS: { [key: string]: InstructionFormat } = {
   'BL': { mnemonic: 'BL', format: 'B', opcode: '100101', rec2Loc: 'x', uncondBranch: '1', flagBranch: '0', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: 'x', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '// Luu dia chi quay lai vao X30, dung RET de quay lai' },
 
   // CB-Format
-  'CBZ': { mnemonic: 'CBZ', format: 'C', opcode: '10110100', rec2Loc: '1', uncondBranch: '0', flagBranch: '0', zeroBranch: '1', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: '01', regWrite: '0', aluControlOut: '0111', note: 'null' },
-  'CBNZ': { mnemonic: 'CBNZ', format: 'C', opcode: '10110101', rec2Loc: '1', uncondBranch: '0', flagBranch: '0', zeroBranch: '1', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: '01', regWrite: '0', aluControlOut: '0111', note: 'null' },
-  'B.EQ': { mnemonic: 'B.EQ', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'Z=1' },
-  'B.NE': { mnemonic: 'B.NE', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'Z=0' },
-  'B.MI': { mnemonic: 'B.MI', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=1' },
-  'B.PL': { mnemonic: 'B.PL', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=0' },
-  'B.VS': { mnemonic: 'B.VS', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'V=1' },
-  'B.VC': { mnemonic: 'B.VC', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'V=0' },
-  'B.HI': { mnemonic: 'B.HI', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '(Z=0 & C=1)' },
-  'B.LS': { mnemonic: 'B.LS', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '~(Z=0 & C=1)' },
-  'B.GE': { mnemonic: 'B.GE', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=V' },
-  'B.LT': { mnemonic: 'B.LT', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N!=V' },
-  'B.GT': { mnemonic: 'B.GT', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '(Z=0 & N=V)' },
-  'B.LE': { mnemonic: 'B.LE', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '~(Z=0 & N=V)' },
-  'B.HS': { mnemonic: 'B.HS', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'C=1' },
-  'B.LO': { mnemonic: 'B.LO', format: 'C', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'C=0' },
+  'CBZ': { mnemonic: 'CBZ', format: 'CB', opcode: '10110100', rec2Loc: '1', uncondBranch: '0', flagBranch: '0', zeroBranch: '1', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: '01', regWrite: '0', aluControlOut: '0111', note: 'null' },
+  'CBNZ': { mnemonic: 'CBNZ', format: 'CB', opcode: '10110101', rec2Loc: '1', uncondBranch: '0', flagBranch: '0', zeroBranch: '1', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: '01', regWrite: '0', aluControlOut: '0111', note: 'null' },
+  'B.EQ': { mnemonic: 'B.EQ', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'Z=1' },
+  'B.NE': { mnemonic: 'B.NE', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'Z=0' },
+  'B.MI': { mnemonic: 'B.MI', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=1' },
+  'B.PL': { mnemonic: 'B.PL', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=0' },
+  'B.VS': { mnemonic: 'B.VS', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'V=1' },
+  'B.VC': { mnemonic: 'B.VC', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'V=0' },
+  'B.HI': { mnemonic: 'B.HI', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '(Z=0 & C=1)' },
+  'B.LS': { mnemonic: 'B.LS', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '~(Z=0 & C=1)' },
+  'B.GE': { mnemonic: 'B.GE', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N=V' },
+  'B.LT': { mnemonic: 'B.LT', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'N!=V' },
+  'B.GT': { mnemonic: 'B.GT', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '(Z=0 & N=V)' },
+  'B.LE': { mnemonic: 'B.LE', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: '~(Z=0 & N=V)' },
+  'B.HS': { mnemonic: 'B.HS', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'C=1' },
+  'B.LO': { mnemonic: 'B.LO', format: 'CB', opcode: '01010100', rec2Loc: '1', uncondBranch: '0', flagBranch: '1', zeroBranch: '0', memRead: '0', memToReg: 'x', memWrite: '0', flagWrite: '0', aluSrc: '0', aluOp: 'x', regWrite: '0', aluControlOut: 'x', note: 'C=0' },
 };
 
 export class LEGv8InstructionParser {
@@ -186,7 +186,7 @@ export class LEGv8InstructionParser {
       case 'B':
         machineCode = this.generateBFormat(parts, format, fields, currentPC, instructionMemory);
         break;
-      case 'C':
+      case 'CB':
         machineCode = this.generateCBFormat(parts, format, fields, currentPC, instructionMemory);
         break;
       default:
@@ -453,6 +453,30 @@ export class LEGv8InstructionParser {
       // Conditional branch: B.EQ label
       let displayValue = parts[1] || 'label';
       
+      // Map condition codes to binary values (5 bits)
+      const conditionCodes: { [key: string]: string } = {
+        'B.EQ': '00000',  // 0
+        'B.NE': '00001',  // 1
+        'B.HS': '00010',  // 2 (also B.CS)
+        'B.LO': '00011',  // 3 (also B.CC)
+        'B.MI': '00100',  // 4
+        'B.PL': '00101',  // 5
+        'B.VS': '00110',  // 6
+        'B.VC': '00111',  // 7
+        'B.HI': '01000',  // 8
+        'B.LS': '01001',  // 9
+        'B.GE': '01010',  // 10
+        'B.LT': '01011',  // 11
+        'B.GT': '01100',  // 12
+        'B.LE': '01101',  // 13
+        'B.CS': '00010',  // 2 (alias for B.HS)
+        'B.CC': '00011',  // 3 (alias for B.LO)
+        'B.AL': '01110'   // 14 (always)
+      };
+      
+      // Get the condition code for this instruction
+      rt = conditionCodes[format.mnemonic] || '00000';
+      
       if (parts.length > 1 && currentPC !== undefined && instructionMemory) {
         const label = parts[1];
         const targetAddress = this.resolveLabel(label, instructionMemory);
@@ -478,9 +502,13 @@ export class LEGv8InstructionParser {
         }
       }
       
+      // Get condition name for display
+      const conditionName = format.mnemonic.substring(2); // Remove 'B.' prefix
+      const conditionValue = parseInt(rt, 2); // Convert binary to decimal for display
+      
       fields.opcode = { bits: opcode, value: format.mnemonic, position: '31-24' };
       fields.address = { bits: address, value: displayValue, position: '23-5' };
-      fields.rt = { bits: '00000', value: 'cond', position: '4-0' };
+      fields.rt = { bits: rt, value: `${conditionName} (${conditionValue})`, position: '4-0' };
     } else {
       // CBZ/CBNZ: CBZ Rt, label
       rt = this.parseRegister(parts[1]);

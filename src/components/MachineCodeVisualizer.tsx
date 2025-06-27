@@ -257,7 +257,7 @@ const getFormatExplanation = (format: string): string => {
       return 'IM-Format: Wide immediate operations (MOVZ/MOVK). Contains opcode, 16-bit immediate value, shift amount, and destination register (Rd).';
     case 'B':
       return 'B-Format: Unconditional branch operations. Contains opcode and 26-bit branch address.';
-    case 'C':
+    case 'CB':
       return 'CB-Format: Conditional branch operations. Contains opcode, 19-bit branch address, and condition register (Rt) or condition code.';
     default:
       return 'Unknown instruction format.';

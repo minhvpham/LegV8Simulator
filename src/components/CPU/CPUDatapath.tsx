@@ -98,9 +98,18 @@ const CPUDatapath: React.FC = () => {
       
       console.log(`Completed phase ${phaseIndex + 1}: ${stage.stageName}`);
       
-      // Increment to next phase after successful completion
-      const nextPhase = (phaseIndex + 1) % WORKFLOW.length;
-      setCurrentPhase(nextPhase);
+      // Check if this was the last stage (PC update)
+      if (phaseIndex === WORKFLOW.length - 1) {
+        console.log('🎯 Last stage completed! Advancing to next instruction...');
+        // Reset to first phase for next instruction
+        setCurrentPhase(0);
+        // Trigger the step function to advance to next instruction
+        step();
+      } else {
+        // Increment to next phase after successful completion
+        const nextPhase = phaseIndex + 1;
+        setCurrentPhase(nextPhase);
+      }
       
     } catch (error) {
       console.error('Phase execution error:', error);
@@ -2511,14 +2520,14 @@ const CPUDatapath: React.FC = () => {
         <div className="absolute top-16 left-4 z-20">
           <button
             onClick={goToNextPhase}
-            disabled={phaseInProgress}
+            disabled={phaseInProgress || isAnimating}
             className={`px-4 py-2 rounded-lg font-medium transition-colors shadow-lg ${
-              phaseInProgress
+              phaseInProgress || isAnimating
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {phaseInProgress ? 'Processing...' : 'Next Stage'}
+            {phaseInProgress ? 'Processing...' : isAnimating ? 'Step Running...' : 'Next Stage'}
           </button>
         </div>
       )}
@@ -2527,9 +2536,9 @@ const CPUDatapath: React.FC = () => {
       <div className="absolute bottom-4 right-4 z-20">
         <button
           onClick={handleNextStep}
-          disabled={isAnimating}
+          disabled={isAnimating || phaseInProgress}
           className={`px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-all duration-200 ${
-            isAnimating 
+            isAnimating || phaseInProgress
               ? 'bg-gray-400 cursor-not-allowed' 
               : 'bg-green-600 hover:bg-green-700 hover:shadow-xl active:scale-95'
           }`}
@@ -2538,6 +2547,11 @@ const CPUDatapath: React.FC = () => {
             <div className="flex items-center space-x-2">
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               <span>Animating...</span>
+            </div>
+          ) : phaseInProgress ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Stage Running...</span>
             </div>
           ) : (
             'Next Step'

@@ -536,19 +536,112 @@ export class InstructionAnimationController {
             
           case 'INSTRUCTION_FIELD_4_0':
             // Rd field [4-0] - 5 bits in pure binary
+            // For CB-Format: either register (CBZ/CBNZ) or condition code (B.COND)
             if (this.machineCodeBreakdown?.machineCode32Bit) {
               const binaryString = this.machineCodeBreakdown.machineCode32Bit;
               const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
-              actualValue = rdBits;
-              console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${actualValue}`);
+              
+              // Check if this is a CB-Format instruction
+              if (this.machineCodeBreakdown?.format === 'CB') {
+                const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+                
+                if (instructionName && instructionName.startsWith('B.')) {
+                  // B.COND instruction - Rt field contains condition code
+                  const conditionValue = parseInt(rdBits, 2);
+                  const conditionMap: { [key: number]: string } = {
+                    0: 'EQ',   // B.EQ: 00000
+                    1: 'NE',   // B.NE: 00001
+                    2: 'HS',   // B.HS: 00010 (also CS)
+                    3: 'LO',   // B.LO: 00011 (also CC)
+                    4: 'MI',   // B.MI: 00100
+                    5: 'PL',   // B.PL: 00101
+                    6: 'VS',   // B.VS: 00110
+                    7: 'VC',   // B.VC: 00111
+                    8: 'HI',   // B.HI: 01000
+                    9: 'LS',   // B.LS: 01001
+                    10: 'GE',  // B.GE: 01010
+                    11: 'LT',  // B.LT: 01011
+                    12: 'GT',  // B.GT: 01100
+                    13: 'LE',  // B.LE: 01101
+                    14: 'AL'   // B.AL: 01110
+                  };
+                  
+                  const conditionName = conditionMap[conditionValue] || 'UNKNOWN';
+                  actualValue = rdBits; // Keep binary for internal use
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format B.${conditionName}) to: ${actualValue} (condition code: ${conditionValue})`);
+                } else if (instructionName && (instructionName === 'CBZ' || instructionName === 'CBNZ')) {
+                  // CBZ/CBNZ instruction - Rt field contains register number
+                  const registerNumber = parseInt(rdBits, 2);
+                  actualValue = rdBits; // Keep binary for internal use
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format ${instructionName}) to: ${actualValue} (register X${registerNumber})`);
+                } else {
+                  // Default CB-Format handling
+                  actualValue = rdBits;
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format) to: ${actualValue}`);
+                }
+              } else {
+                // Non-CB-Format instruction - standard register field
+                actualValue = rdBits;
+                console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${actualValue}`);
+              }
             }
             break;
-            
           case 'INSTRUCTION_FIELD_31_0':
             // Full instruction - all 32 bits in pure binary
             if (this.machineCodeBreakdown?.machineCode32Bit) {
               actualValue = this.machineCodeBreakdown.machineCode32Bit;
               console.log(`🎯 Resolved INSTRUCTION_FIELD_31_0 to: ${actualValue}`);
+            }
+            break;
+            
+          case 'INSTRUCTION_IMMEDIATE_FIELD':
+            // Extract immediate field based on instruction format
+            if (this.machineCodeBreakdown?.machineCode32Bit && this.machineCodeBreakdown?.format) {
+              const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
+              const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
+              
+              console.log(`🎯 Extracting immediate field for ${instructionFormat}-format instruction`);
+              console.log(`🎯 Full instruction: ${instructionBinary}`);
+              
+              let extractedBits = '';
+              
+              // Extract immediate bits based on instruction format
+              switch (instructionFormat) {
+                case 'I':
+                  // I-Type: Extract bits [21:10] (12 bits)
+                  extractedBits = instructionBinary.substring(10, 22);
+                  console.log(`🎯 I-Type: Extracted immediate bits [21:10] = ${extractedBits}`);
+                  break;
+                  
+                case 'D':
+                  // D-Type: Extract bits [20:12] (9 bits)
+                  extractedBits = instructionBinary.substring(11, 20);
+                  console.log(`🎯 D-Type: Extracted immediate bits [20:12] = ${extractedBits}`);
+                  break;
+                  
+                case 'CB':
+                  // CB-Type: Extract bits [23:5] (19 bits)
+                  extractedBits = instructionBinary.substring(8, 27);
+                  console.log(`🎯 CB-Type: Extracted immediate bits [23:5] = ${extractedBits}`);
+                  break;
+                  
+                case 'B':
+                  // B-Type: Extract bits [25:0] (26 bits)
+                  extractedBits = instructionBinary.substring(6, 32);
+                  console.log(`🎯 B-Type: Extracted immediate bits [25:0] = ${extractedBits}`);
+                  break;
+                  
+                default:
+                  console.warn(`🔴 Unknown instruction format: ${instructionFormat}, defaulting to I-Type`);
+                  extractedBits = instructionBinary.substring(10, 22);
+                  break;
+              }
+              
+              actualValue = extractedBits;
+              console.log(`🎯 Resolved INSTRUCTION_IMMEDIATE_FIELD to: ${actualValue}`);
+            } else {
+              console.warn(`🔴 Cannot extract immediate field: missing machineCode32Bit or format`);
+              actualValue = '000000000000'; // Default 12-bit immediate
             }
             break;
           case 'C_REGWRITE':
@@ -678,7 +771,7 @@ export class InstructionAnimationController {
                 const isNegative = msb === '1';
                 
                 // Calculate the number of bits to pad (64 - extracted bits)
-                const paddingBits = 64 - bitCount;
+                const paddingBits = 32 - bitCount;
                 const paddingValue = isNegative ? '1' : '0';
                 const padding = paddingValue.repeat(paddingBits);
                 
@@ -711,8 +804,75 @@ export class InstructionAnimationController {
             
 
             default:
-            // Keep original value if no placeholder match
-            console.log(`📋 Using original value for ${placeholder}: ${actualValue}`);
+            // Check if this is a SignExtend split operation
+            if (operation.targetComponent === 'SignExtend' && sourceCircle) {
+              // This is a SignExtend split - apply sign extension to the source circle's value
+              console.log(`🎯 SignExtend Split: Processing ${placeholder} from source: ${sourceCircle.dataValue}`);
+              
+              if (this.machineCodeBreakdown?.format) {
+                const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
+                let immediateValue: number;
+                let bitCount = 0;
+                
+                // Parse the immediate field from the source circle
+                const sourceValue = sourceCircle.dataValue.toString();
+                
+                // Determine bit count based on instruction format
+                switch (instructionFormat) {
+                  case 'I': bitCount = 12; break;  // I-Type: 12-bit immediate
+                  case 'D': bitCount = 9; break;   // D-Type: 9-bit immediate  
+                  case 'CB': bitCount = 19; break; // CB-Type: 19-bit immediate
+                  case 'B': bitCount = 26; break;  // B-Type: 26-bit immediate
+                  default: bitCount = 12; break;   // Default to I-Type
+                }
+                
+                // Convert binary string to number for sign extension
+                if (sourceValue.match(/^[01]+$/)) {
+                  // Source is binary string
+                  immediateValue = parseInt(sourceValue, 2);
+                  
+                  // Handle two's complement for negative values
+                  if (sourceValue[0] === '1' && sourceValue.length === bitCount) {
+                    immediateValue = immediateValue - Math.pow(2, bitCount);
+                  }
+                } else {
+                  // Source might be already converted, try parsing as number
+                  immediateValue = parseInt(sourceValue, 10) || 0;
+                }
+                
+                // Perform sign extension to 64 bits
+                const isNegative = immediateValue < 0;
+                let signExtended64Bit: string;
+                
+                if (isNegative) {
+                  // For negative numbers, pad with 1s
+                  const positiveValue = Math.abs(immediateValue);
+                  const binaryRep = positiveValue.toString(2).padStart(bitCount, '0');
+                  const twosComplement = (Math.pow(2, 64) - positiveValue).toString(2);
+                  signExtended64Bit = twosComplement.padStart(64, '1');
+                } else {
+                  // For positive numbers, pad with 0s
+                  const binaryRep = immediateValue.toString(2);
+                  signExtended64Bit = binaryRep.padStart(64, '0');
+                }
+                
+                actualValue = signExtended64Bit;
+                
+                console.log(`🎯 SignExtend Details:`);
+                console.log(`   - Source immediate: ${sourceValue} (${instructionFormat}-format)`);
+                console.log(`   - Bit count: ${bitCount}`);
+                console.log(`   - Parsed value: ${immediateValue}`);
+                console.log(`   - Sign extended: ${actualValue}`);
+                console.log(`   - Result for ${splitResult.id}: ${actualValue}`);
+              } else {
+                // Fallback: use source value as-is
+                actualValue = sourceCircle.dataValue;
+                console.log(`🎯 SignExtend fallback: Using source value ${actualValue}`);
+              }
+            } else {
+              // Keep original value if no placeholder match
+              console.log(`📋 Using original value for ${placeholder}: ${actualValue}`);
+            }
             break;
             case 'D_ALU_RESULT_MEM':
             case 'D_ALU_RESULT_MUX':
@@ -1953,14 +2113,56 @@ export class InstructionAnimationController {
             
           case 'INSTRUCTION_FIELD_4_0':
             // Rd field [4-0] - 5 bits in pure binary
+            // For CB-Format: either register (CBZ/CBNZ) or condition code (B.COND)
             if (this.machineCodeBreakdown?.machineCode32Bit) {
               const binaryString = this.machineCodeBreakdown.machineCode32Bit;
               const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
-              newValue = rdBits;
-              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_4_0 to: ${newValue}`);
+              
+              // Check if this is a CB-Format instruction
+              if (this.machineCodeBreakdown?.format === 'CB') {
+                const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+                
+                if (instructionName && instructionName.startsWith('B.')) {
+                  // B.COND instruction - Rt field contains condition code
+                  const conditionValue = parseInt(rdBits, 2);
+                  const conditionMap: { [key: number]: string } = {
+                    0: 'EQ',   // B.EQ: 00000
+                    1: 'NE',   // B.NE: 00001
+                    2: 'HS',   // B.HS: 00010 (also CS)
+                    3: 'LO',   // B.LO: 00011 (also CC)
+                    4: 'MI',   // B.MI: 00100
+                    5: 'PL',   // B.PL: 00101
+                    6: 'VS',   // B.VS: 00110
+                    7: 'VC',   // B.VC: 00111
+                    8: 'HI',   // B.HI: 01000
+                    9: 'LS',   // B.LS: 01001
+                    10: 'GE',  // B.GE: 01010
+                    11: 'LT',  // B.LT: 01011
+                    12: 'GT',  // B.GT: 01100
+                    13: 'LE',  // B.LE: 01101
+                    14: 'AL'   // B.AL: 01110
+                  };
+                  
+                  const conditionName = conditionMap[conditionValue] || 'UNKNOWN';
+                  newValue = rdBits; // Keep binary for internal use
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format B.${conditionName}) to: ${newValue} (condition code: ${conditionValue})`);
+                } else if (instructionName && (instructionName === 'CBZ' || instructionName === 'CBNZ')) {
+                  // CBZ/CBNZ instruction - Rt field contains register number
+                  const registerNumber = parseInt(rdBits, 2);
+                  newValue = rdBits; // Keep binary for internal use
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format ${instructionName}) to: ${newValue} (register X${registerNumber})`);
+                } else {
+                  // Default CB-Format handling
+                  newValue = rdBits;
+                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format) to: ${newValue}`);
+                }
+              } else {
+                // Non-CB-Format instruction - standard register field
+                newValue = rdBits;
+                console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${newValue}`);
+              }
             }
             break;
-            
           case 'INSTRUCTION_FIELD_31_0':
             // Full instruction - all 32 bits in pure binary
             if (this.machineCodeBreakdown?.machineCode32Bit) {
@@ -1997,18 +2199,28 @@ export class InstructionAnimationController {
             // Parse the immediate value - handle different formats
             if (sourceValue.startsWith('0x')) {
               immediateValue = parseInt(sourceValue, 16);
+              console.log(`🔧 Parsed as hex: ${immediateValue}`);
             } else if (sourceValue.startsWith('0b')) {
               immediateValue = parseInt(sourceValue.slice(2), 2);
-            } else if (/^-?\d+$/.test(sourceValue)) {
-              immediateValue = parseInt(sourceValue, 10);
-            } else {
-              // Try to parse as binary string (for sign-extended immediate)
+              console.log(`🔧 Parsed as prefixed binary: ${immediateValue}`);
+            } else if (sourceValue.match(/^[01]+$/) && sourceValue.length > 8) {
+              // Long binary string (likely from SignExtend) - parse as binary
               immediateValue = parseInt(sourceValue, 2);
+              console.log(`🔧 Parsed as binary string (${sourceValue.length} bits): ${immediateValue}`);
+              
               // Handle two's complement for negative values if needed
-              if (sourceValue.length > 0 && sourceValue[0] === '1' && sourceValue.length <= 32) {
+              if (sourceValue[0] === '1' && sourceValue.length <= 64) {
                 const bitLength = sourceValue.length;
                 immediateValue = immediateValue - Math.pow(2, bitLength);
+                console.log(`🔧 Applied two's complement: ${immediateValue}`);
               }
+            } else if (/^-?\d+$/.test(sourceValue)) {
+              immediateValue = parseInt(sourceValue, 10);
+              console.log(`🔧 Parsed as decimal: ${immediateValue}`);
+            } else {
+              // Fallback: try parsing as binary
+              immediateValue = parseInt(sourceValue, 2);
+              console.log(`🔧 Fallback binary parse: ${immediateValue}`);
             }
             
             // Get instruction format for context

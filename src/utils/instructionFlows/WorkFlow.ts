@@ -45,15 +45,16 @@ import { BRANCHOR_TO_MUXPC_SIGNAL_PATH } from './wirePaths/BRANCHOR_TO_MUXPC_SIG
  */
 
 // =================================================================================================
-// STAGE 3: Execute 
+// STAGE 3A: Execute - Control Signal Generation
 // =================================================================================================
-const FORMAT_EX_STAGE: StageDataFlow = {
-  stageName: "Execute (EX)",
+const FORMAT_EX_3A_CONTROL_STAGE: StageDataFlow = {
+  stageName: "Execute 3A - Control Signals",
   initialCircles: [
     'D_Opcode', 'D_Rn_Idx', 'D_Rm_Idx', 'D_Rt_Idx', 'D_Write_Addr_Idx', 'D_Imm', 'D_Funct',
     'D_PC_Plus_4', 'D_PC_Branch'
   ],
-  operations: [    // 1. Control signal generation. D_Opcode is split to create signals AND pass itself through.
+  operations: [
+    // 1. Control signal generation. D_Opcode is split to create signals AND pass itself through.
     {
       type: 'split',
       timing: 0,
@@ -125,11 +126,32 @@ const FORMAT_EX_STAGE: StageDataFlow = {
           wirePath: CONTROL_ZERO_BRANCH_SIGNAL_PATH
         }
       ]
-    },
+    }
+  ],
+  finalCircles: [
+    'D_Rn_Idx', 'D_Rm_Idx', 'D_Rt_Idx', 'D_Write_Addr_Idx', 'D_Imm', 'D_Funct',
+    'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_Reg2Loc', 'C_ALUSrc', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch'
+  ],
+  duration: 500,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 3B: Execute - Register File Read Path
+// =================================================================================================
+const FORMAT_EX_3B_REGISTER_STAGE: StageDataFlow = {
+  stageName: "Execute 3B - Register Read",
+  initialCircles: [
+    'D_Rn_Idx', 'D_Rm_Idx', 'D_Rt_Idx', 'D_Write_Addr_Idx', 'D_Imm', 'D_Funct',
+    'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_Reg2Loc', 'C_ALUSrc', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch'
+  ],
+  operations: [
     // 2. REG2LOC Multiplexer: Select between Rm and Rt based on Reg2Loc control signal
     {
       type: 'merge', 
-      timing: 200, 
+      timing: 0, 
       sourceCircleIds: ['D_Rm_Idx', 'C_Reg2Loc', 'D_Rt_Idx'], 
       targetComponent: 'MuxReg2Loc',
       results: [{
@@ -139,10 +161,10 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'MuxReg2Loc'
       }]
     },
-    { type: 'move', timing: 600, sourceCircleIds: ['D_RegRead2_Idx'], targetComponent: 'RegFile', wirePath: MUXREG2LOC_TO_REGFILE_READ2_PATH },
+    { type: 'move', timing: 300, sourceCircleIds: ['D_RegRead2_Idx'], targetComponent: 'RegFile', wirePath: MUXREG2LOC_TO_REGFILE_READ2_PATH },
     { 
       type:'transform', 
-      timing: 900, 
+      timing: 500, 
       sourceCircleIds: ['D_RegRead2_Idx'], 
       targetComponent: 'RegFile', 
       results: [{
@@ -154,7 +176,7 @@ const FORMAT_EX_STAGE: StageDataFlow = {
     },
     {
         type: 'split',
-        timing: 1200,
+        timing: 700,
         sourceCircleIds: ['D_RegRead2_Val'],
         targetComponent: 'RegFile',
         preserveSource: false, // Don't keep D_RegRead2_Val as cycle is complete
@@ -177,7 +199,7 @@ const FORMAT_EX_STAGE: StageDataFlow = {
     },
     { 
       type: 'transform', 
-      timing: 1500, 
+      timing: 900, 
       sourceCircleIds: ['D_Rn_Idx'], 
       targetComponent: 'RegFile', 
       results: [{
@@ -187,22 +209,31 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'RegFile'
       }]
     },
-    { type: 'move', timing: 1800, sourceCircleIds: ['D_Rn_Val'], targetComponent: 'ALUMain', wirePath: REGFILE_TO_ALUMAIN_PATH },
-    // { 
-    //   type: 'transform', 
-    //   timing: 2100, 
-    //   sourceCircleIds: ['D_Imm'], 
-    //   targetComponent: 'SignExtend', 
-    //   results: [{
-    //     id: 'D_SignExt_1',
-    //     dataValue: 'test',
-    //     dataType: 'immediate',
-    //     targetComponent: 'SignExtend'
-    //   }]
-    // }, 
+    { type: 'move', timing: 1100, sourceCircleIds: ['D_Rn_Val'], targetComponent: 'ALUMain', wirePath: REGFILE_TO_ALUMAIN_PATH }
+  ],
+  finalCircles: [
+    'D_Write_Addr_Idx', 'D_Imm', 'D_Funct', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_ALUSrc', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_Mux', 'D_RegRead2_Val_DataMem', 'D_Rn_Val'
+  ],
+  duration: 1300,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 3C: Execute - Data Path Setup  
+// =================================================================================================
+const FORMAT_EX_3C_DATAPATH_STAGE: StageDataFlow = {
+  stageName: "Execute 3C - Data Path Setup",
+  initialCircles: [
+    'D_Write_Addr_Idx', 'D_Imm', 'D_Funct', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_ALUSrc', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_Mux', 'D_RegRead2_Val_DataMem', 'D_Rn_Val'
+  ],
+  operations: [
     { 
       type: 'split',
-      timing: 2400,
+      timing: 0,
       sourceCircleIds: ['D_Imm'],
       targetComponent: 'SignExtend',
       preserveSource: false, // Don't keep D_SignExt_1 as cycle is complete
@@ -226,7 +257,7 @@ const FORMAT_EX_STAGE: StageDataFlow = {
     // 2. MuxReadReg: Select between Rn value and Sign-extended immediate based on ALUSrc control signal
     { 
       type: 'merge', 
-      timing: 2700, 
+      timing: 300, 
       sourceCircleIds: ['D_RegRead2_Val_Mux', 'D_SignExt_Imm', 'C_ALUSrc'], 
       targetComponent: 'MuxReadReg', 
       results: [{
@@ -236,11 +267,32 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'MuxReadReg'
       }]
     },
-    { type: 'move', timing: 3000, sourceCircleIds: ['D_ALUSrc_Mux_Out'], targetComponent: 'ALUMain', wirePath: MUXREADREG_TO_ALUMAIN_PATH },
+    { type: 'move', timing: 600, sourceCircleIds: ['D_ALUSrc_Mux_Out'], targetComponent: 'ALUMain', wirePath: MUXREADREG_TO_ALUMAIN_PATH }
+  ],
+  finalCircles: [
+    'D_Write_Addr_Idx', 'D_Funct', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_DataMem', 'D_Rn_Val', 'D_Branch_Imm', 'D_ALUSrc_Mux_Out'
+  ],
+  duration: 800,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 3D: Execute - ALU Operations
+// =================================================================================================
+const FORMAT_EX_3D_ALU_STAGE: StageDataFlow = {
+  stageName: "Execute 3D - ALU Operations",
+  initialCircles: [
+    'D_Write_Addr_Idx', 'D_Funct', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_ALUOp', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_DataMem', 'D_Rn_Val', 'D_Branch_Imm', 'D_ALUSrc_Mux_Out'
+  ],
+  operations: [
     // 3. ALU Control signal generation.
     { 
       type: 'merge', 
-      timing: 3300, 
+      timing: 0, 
       sourceCircleIds: ['C_ALUOp', 'D_Funct'], 
       targetComponent: 'ALUControl', 
       results: [{
@@ -250,11 +302,11 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'ALUControl'
       }]
     },
-    { type: 'move', timing: 3600, sourceCircleIds: ['C_ALU_Func_Binary'], targetComponent: 'ALUMain', wirePath: ALUCONTROL_TO_ALUMAIN_SIGNAL_PATH },
+    { type: 'move', timing: 300, sourceCircleIds: ['C_ALU_Func_Binary'], targetComponent: 'ALUMain', wirePath: ALUCONTROL_TO_ALUMAIN_SIGNAL_PATH },
     // 4. Main ALU calculation.
     { 
       type: 'merge', 
-      timing: 3900, 
+      timing: 600, 
       sourceCircleIds: ['D_Rn_Val', 'D_ALUSrc_Mux_Out', 'C_ALU_Func_Binary'], 
       targetComponent: 'ALUMain', 
       results: [{
@@ -263,10 +315,31 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         dataType: 'register_data',
         targetComponent: 'ALUMain'
       }]
-    },
+    }
+  ],
+  finalCircles: [
+    'D_Write_Addr_Idx', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_DataMem', 'D_Branch_Imm', 'D_ALU_Result'
+  ],
+  duration: 900,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 3E: Execute - Branch Path & ALU Split
+// =================================================================================================
+const FORMAT_EX_3E_BRANCH_STAGE: StageDataFlow = {
+  stageName: "Execute 3E - Branch & Split",
+  initialCircles: [
+    'D_Write_Addr_Idx', 'D_PC_Plus_4', 'D_PC_Branch',
+    'C_RegWrite', 'C_MemRead', 'C_MemWrite', 'C_MemToReg', 'C_UncondBranch', 'C_ZeroBranch',
+    'D_RegRead2_Val_DataMem', 'D_Branch_Imm', 'D_ALU_Result'
+  ],
+  operations: [
     { 
       type: 'transform', 
-      timing: 4200, 
+      timing: 0, 
       sourceCircleIds: ['D_Branch_Imm'], 
       targetComponent: 'ShiftLeft2', 
       results: [{
@@ -276,10 +349,10 @@ const FORMAT_EX_STAGE: StageDataFlow = {
         targetComponent: 'ShiftLeft2'
       }]
     },
-    { type: 'move', timing: 4500, sourceCircleIds: ['D_Shift_Result'], targetComponent: 'ALUBranch', wirePath: SHIFTLEFT2_TO_ALUBRANCH_PATH },
+    { type: 'move', timing: 300, sourceCircleIds: ['D_Shift_Result'], targetComponent: 'ALUBranch', wirePath: SHIFTLEFT2_TO_ALUBRANCH_PATH },
     { 
       type: 'merge', 
-      timing: 4800, 
+      timing: 600, 
       sourceCircleIds: ['D_PC_Branch', 'D_Shift_Result'], 
       targetComponent: 'ALUBranch', 
       results: [{
@@ -291,7 +364,7 @@ const FORMAT_EX_STAGE: StageDataFlow = {
     },  
     {
         type: 'split',
-        timing: 5100,
+        timing: 900,
         sourceCircleIds: ['D_ALU_Result'],
         targetComponent: "ALUMain",
         preserveSource: false, // Don't keep D_ALU_Result as cycle is complete
@@ -335,15 +408,15 @@ const FORMAT_EX_STAGE: StageDataFlow = {
     'C_UncondBranch',
     'C_ZeroBranch'
   ],
-  duration: 5400,
+  duration: 1200,
   simultaneousFlows: false
 };
 
 // =================================================================================================
-// STAGE 4: Memory Access (I-Format)
+// STAGE 4A: Memory - Setup & Write
 // =================================================================================================
-const FORMAT_MEM_STAGE: StageDataFlow = {
-  stageName: "Memory (MEM)",
+const FORMAT_MEM_4A_SETUP_STAGE: StageDataFlow = {
+  stageName: "Memory 4A - Setup & Write",
   initialCircles: [
     'D_RegRead2_Val_DataMem',
     'D_ALU_Result_Mem',
@@ -375,7 +448,7 @@ const FORMAT_MEM_STAGE: StageDataFlow = {
     },
     { 
       type: 'merge', 
-      timing: 100, 
+      timing: 200, 
       sourceCircleIds: ['D_DataMem_Addr_Ready', 'C_MemWrite', 'D_ALU_Result_Mem'], 
       targetComponent: 'DataMem',
       results: [{
@@ -384,10 +457,47 @@ const FORMAT_MEM_STAGE: StageDataFlow = {
         dataType: 'memory_data',
         targetComponent: 'DataMem'
       }]
-    },
+    }
+  ],
+  finalCircles: [
+    'D_RegRead2_Val_DataMem',
+    'D_ALU_Result_Mux',
+    'D_ALU_Result_Zero',
+    'D_Write_Addr_Idx', 
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'C_RegWrite',
+    'C_MemRead',
+    'C_MemToReg',
+    'C_UncondBranch',
+    'C_ZeroBranch'
+  ],
+  duration: 500,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 4B: Memory - Read Operation
+// =================================================================================================
+const FORMAT_MEM_4B_READ_STAGE: StageDataFlow = {
+  stageName: "Memory 4B - Read",
+  initialCircles: [
+    'D_RegRead2_Val_DataMem',
+    'D_ALU_Result_Mux',
+    'D_ALU_Result_Zero',
+    'D_Write_Addr_Idx', 
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'C_RegWrite',
+    'C_MemRead',
+    'C_MemToReg',
+    'C_UncondBranch',
+    'C_ZeroBranch'
+  ],
+  operations: [
     { 
       type: 'merge', 
-      timing: 400, 
+      timing: 0, 
       sourceCircleIds: ['D_RegRead2_Val_DataMem', 'C_MemRead'], 
       targetComponent: 'DataMem', 
       results: [{
@@ -398,7 +508,7 @@ const FORMAT_MEM_STAGE: StageDataFlow = {
       }
     ]
     },
-    { type: 'move', timing: 500, sourceCircleIds: ['D_DataMem_read'], targetComponent: 'MuxReadMem', wirePath: DATAMEM_TO_MUXREADMEM_PATH }
+    { type: 'move', timing: 200, sourceCircleIds: ['D_DataMem_read'], targetComponent: 'MuxReadMem', wirePath: DATAMEM_TO_MUXREADMEM_PATH }
   ],
   finalCircles: [
     'D_DataMem_read',
@@ -412,15 +522,15 @@ const FORMAT_MEM_STAGE: StageDataFlow = {
     'C_UncondBranch',
     'C_ZeroBranch'
   ],
-  duration: 700,
+  duration: 400,
   simultaneousFlows: false
 };
 
 // =================================================================================================
-// STAGE 5: Write Back (I-Format)
+// STAGE 5A: Write Back - Data Selection
 // =================================================================================================
-const FORMAT_WB_STAGE: StageDataFlow = {
-  stageName: "Write Back (WB)",
+const FORMAT_WB_5A_SELECT_STAGE: StageDataFlow = {
+  stageName: "Write Back 5A - Data Selection",
   initialCircles: [
     'D_DataMem_read',
     'D_ALU_Result_Mux',
@@ -432,10 +542,11 @@ const FORMAT_WB_STAGE: StageDataFlow = {
     'C_MemToReg',
     'C_UncondBranch',
     'C_ZeroBranch'
-  ],  operations: [   
+  ],  
+  operations: [   
     { 
       type: 'merge', 
-      timing: 200, 
+      timing: 0, 
       sourceCircleIds: ['D_DataMem_read', 'C_MemToReg', 'D_ALU_Result_Mux'], 
       targetComponent: 'MuxReadMem', 
       results: [{
@@ -445,10 +556,41 @@ const FORMAT_WB_STAGE: StageDataFlow = {
         targetComponent: 'MuxReadMem'
       }]
     },
-    { type: 'move', timing: 300, sourceCircleIds: ['D_RegFile_Write'], targetComponent: 'RegFile', wirePath: MUXREADMEM_TO_REGFILE_PATH },
+    { type: 'move', timing: 200, sourceCircleIds: ['D_RegFile_Write'], targetComponent: 'RegFile', wirePath: MUXREADMEM_TO_REGFILE_PATH }
+  ],
+  finalCircles:  [
+    'D_ALU_Result_Zero',
+    'D_Write_Addr_Idx', 
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'C_RegWrite',
+    'C_UncondBranch',
+    'C_ZeroBranch',
+    'D_RegFile_Write'
+  ],
+  duration: 400,
+  simultaneousFlows: false
+};
+
+// =================================================================================================
+// STAGE 5B: Write Back - Register Commit
+// =================================================================================================
+const FORMAT_WB_5B_COMMIT_STAGE: StageDataFlow = {
+  stageName: "Write Back 5B - Register Commit",
+  initialCircles: [
+    'D_ALU_Result_Zero',
+    'D_Write_Addr_Idx', 
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'C_RegWrite',
+    'C_UncondBranch',
+    'C_ZeroBranch',
+    'D_RegFile_Write'
+  ],
+  operations: [
     { 
       type: 'merge', 
-      timing: 600, 
+      timing: 0, 
       sourceCircleIds: ['D_Write_Addr_Idx', 'C_RegWrite', 'D_RegFile_Write'], 
       targetComponent: 'RegFile', 
       results: [{
@@ -460,7 +602,7 @@ const FORMAT_WB_STAGE: StageDataFlow = {
     },
     { 
       type: 'transform', 
-      timing: 700, 
+      timing: 200, 
       sourceCircleIds: ['D_RegFile_Write_Addr'], 
       targetComponent: 'RegFile'
     }
@@ -472,15 +614,15 @@ const FORMAT_WB_STAGE: StageDataFlow = {
     'C_UncondBranch',
     'C_ZeroBranch'
   ],
-  duration: 900,
+  duration: 400,
   simultaneousFlows: false
 };
 
 // =================================================================================================
-// STAGE 6: PC Update
+// STAGE 6A: PC Update - Branch Logic
 // =================================================================================================
-const PC_UPDATE_STAGE: StageDataFlow = {
-  stageName: "PC Update",
+const PC_UPDATE_6A_BRANCH_STAGE: StageDataFlow = {
+  stageName: "PC Update 6A - Branch Logic",
   initialCircles: [
     'D_ALU_Result_Zero',
     'D_PC_Plus_4', 
@@ -501,10 +643,10 @@ const PC_UPDATE_STAGE: StageDataFlow = {
         targetComponent: 'ZeroAND'
       }]
     },
-    { type: 'move', timing: 50, sourceCircleIds: ['D_Branch_0'], targetComponent: 'BranchOR', wirePath: ZEROAND_TO_BRANCHOR_SIGNAL_PATH },
+    { type: 'move', timing: 200, sourceCircleIds: ['D_Branch_0'], targetComponent: 'BranchOR', wirePath: ZEROAND_TO_BRANCHOR_SIGNAL_PATH },
     { 
       type: 'merge', 
-      timing: 100, 
+      timing: 400, 
       sourceCircleIds: ['C_UncondBranch', 'D_Branch_0'], 
       targetComponent: 'BranchOR', 
       results: [{
@@ -513,15 +655,34 @@ const PC_UPDATE_STAGE: StageDataFlow = {
         dataType: 'control_signal',
         targetComponent: 'BranchOR'
       }]
-    },
+    }
+  ],
+  finalCircles: [
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'D_Branch_1'
+  ],
+  duration: 600,
+  simultaneousFlows: false
+};
 
-    { type: 'move', timing: 200, sourceCircleIds: ['D_Branch_1'], targetComponent: 'MuxPC', wirePath: BRANCHOR_TO_MUXPC_SIGNAL_PATH },
-    { type: 'move', timing: 200, sourceCircleIds: ['D_PC_Plus_4'], targetComponent: 'MuxPC', wirePath: ALUPC_TO_MUXPC_PATH },
-    { type: 'move', timing: 200, sourceCircleIds: ['D_Branch_Addr_Result'], targetComponent: 'MuxPC', wirePath: ALUBRANCH_TO_MUXPC_PATH },
-
+// =================================================================================================
+// STAGE 6B: PC Update - Final PC Selection
+// =================================================================================================
+const PC_UPDATE_6B_SELECT_STAGE: StageDataFlow = {
+  stageName: "PC Update 6B - PC Selection",
+  initialCircles: [
+    'D_PC_Plus_4', 
+    'D_Branch_Addr_Result',
+    'D_Branch_1'
+  ],
+  operations: [
+    { type: 'move', timing: 0, sourceCircleIds: ['D_Branch_1'], targetComponent: 'MuxPC', wirePath: BRANCHOR_TO_MUXPC_SIGNAL_PATH },
+    { type: 'move', timing: 0, sourceCircleIds: ['D_PC_Plus_4'], targetComponent: 'MuxPC', wirePath: ALUPC_TO_MUXPC_PATH },
+    { type: 'move', timing: 0, sourceCircleIds: ['D_Branch_Addr_Result'], targetComponent: 'MuxPC', wirePath: ALUBRANCH_TO_MUXPC_PATH },
     { 
       type: 'merge', 
-      timing: 500, 
+      timing: 300, 
       sourceCircleIds: ['D_PC_Plus_4', 'D_Branch_Addr_Result', 'D_Branch_1'], 
       targetComponent: 'MuxPC', 
       results: [{
@@ -531,27 +692,34 @@ const PC_UPDATE_STAGE: StageDataFlow = {
         targetComponent: 'MuxPC'
       }]
     },
-    { type: 'move', timing: 600, sourceCircleIds: ['D_Next_PC'], targetComponent: 'PC', wirePath: MUXPC_TO_PC_PATH },
+    { type: 'move', timing: 500, sourceCircleIds: ['D_Next_PC'], targetComponent: 'PC', wirePath: MUXPC_TO_PC_PATH },
     { 
       type: 'transform', 
-      timing: 800, 
+      timing: 700, 
       sourceCircleIds: ['D_Next_PC'], 
       targetComponent: 'PC'
     }
   ],
   finalCircles: [], // Instruction cycle is complete.
-  duration: 1000,
+  duration: 900,
   simultaneousFlows: false
 };
 
 // =================================================================================================
-// EXPORT THE FULL WORKFLOW
+// EXPORT THE FULL WORKFLOW (Now 14 smaller stages instead of 6 large ones)
 // =================================================================================================
 export const WORKFLOW: StageDataFlow[] = [
   UNIVERSAL_IF_STAGE,
   UNIVERSAL_ID_STAGE,
-  FORMAT_EX_STAGE,
-  FORMAT_MEM_STAGE,
-  FORMAT_WB_STAGE,
-  PC_UPDATE_STAGE
+  FORMAT_EX_3A_CONTROL_STAGE,
+  FORMAT_EX_3B_REGISTER_STAGE,
+  FORMAT_EX_3C_DATAPATH_STAGE,
+  FORMAT_EX_3D_ALU_STAGE,
+  FORMAT_EX_3E_BRANCH_STAGE,
+  FORMAT_MEM_4A_SETUP_STAGE,
+  FORMAT_MEM_4B_READ_STAGE,
+  FORMAT_WB_5A_SELECT_STAGE,
+  FORMAT_WB_5B_COMMIT_STAGE,
+  PC_UPDATE_6A_BRANCH_STAGE,
+  PC_UPDATE_6B_SELECT_STAGE
 ];
