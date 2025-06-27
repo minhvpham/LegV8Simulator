@@ -2032,6 +2032,47 @@ export class InstructionAnimationController {
             newValue = sourceCircle.dataValue.toString();
             console.log(`🎯 Transform resolved D_DataMem_Addr_Ready to: ${newValue}`);
             break;
+            
+          case 'PC_PLUS_4':
+            console.log('🎯 IMPLEMENTING PC+4 CALCULATION');
+            
+            // Get the PC value from the source circle (D_PC_To_Plus_4)
+            let pcValue: number;
+            const pcSourceValue = sourceCircle.dataValue.toString();
+            
+            console.log(`🔧 Source PC value: ${pcSourceValue}`);
+            
+            // Parse the PC value - handle different formats
+            if (pcSourceValue.startsWith('0x')) {
+              pcValue = parseInt(pcSourceValue, 16);
+            } else if (pcSourceValue.startsWith('0b')) {
+              pcValue = parseInt(pcSourceValue.slice(2), 2);
+            } else if (/^\d+$/.test(pcSourceValue)) {
+              pcValue = parseInt(pcSourceValue, 10);
+            } else {
+              // Fallback to parsing as decimal
+              pcValue = parseInt(pcSourceValue, 10);
+            }
+            
+            // Get instruction format and mnemonic for context
+            const pcPlusInstructionFormat = this.machineCodeBreakdown?.format;
+            const pcPlusInstructionMnemonic = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+            
+            console.log(`🔧 Instruction format: ${pcPlusInstructionFormat}`);
+            console.log(`🔧 Instruction mnemonic: ${pcPlusInstructionMnemonic}`);
+            
+            // Perform PC+4 calculation (add 4 bytes to get next instruction address)
+            const pcPlus4Value = pcValue + 4;
+            
+            console.log(`🔧 PC+4 Calculation:`);
+            console.log(`   - Current PC: ${pcValue} (0x${pcValue.toString(16).toUpperCase().padStart(8, '0')})`);
+            console.log(`   - PC + 4: ${pcPlus4Value} (0x${pcPlus4Value.toString(16).toUpperCase().padStart(8, '0')})`);
+            console.log(`   - Next sequential instruction address for ${pcPlusInstructionFormat}-format ${pcPlusInstructionMnemonic} instruction`);
+            
+            // Format result as hex address
+            newValue = `0x${pcPlus4Value.toString(16).toUpperCase().padStart(8, '0')}`;
+            console.log(`✅ PC+4 Calculation Result: ${newValue}`);
+            break;
                 
             default:
                 // Keep the resolved value from result.dataValue
