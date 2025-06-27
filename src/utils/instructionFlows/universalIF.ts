@@ -45,7 +45,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
           wirePath: PC_TO_INSMEM_PATH, // Wire path object - animation system calls getPathPoints()
         },
         {
-          id: 'D_PC_Plus_4',
+          id: 'D_PC_To_Plus_4',
           dataValue: 'PC_ADDRESS', // ALUPC receives current PC, calculates PC+4 internally
           dataType: 'pc_value',
           targetComponent: 'ALUPC',
@@ -57,6 +57,20 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
           dataType: 'pc_value',
           targetComponent: 'ALUBranch',
           wirePath: PC_TO_ALUBRANCH_PATH, // Wire path object - animation system calls getPathPoints()
+        }
+      ]
+    },
+    {
+      type: 'transform',
+      timing: 300,
+      sourceCircleIds: ['D_PC_To_Plus_4'], // PC+4 calculation
+      targetComponent: 'ALUPC',
+      results: [
+        {
+          id: 'D_PC_Plus_4',
+          dataValue: 'PC_PLUS_4', // Will be resolved to PC+4 in hex
+          dataType: 'pc_value',
+          targetComponent: 'ALUPC'
         }
       ]
     }

@@ -1,27 +1,25 @@
 import { Point } from '../../../types/animationTypes';
 
-// Constants matching CPUDatapath.tsx
-const CONTROL_OFFSET = 15;
-const CONTROL_PADDING = 15;
-
-function getEllipseXIntersect(centerX: number, y: number, radiusX: number, radiusY: number): number {
-  const yNorm = (y - centerX) / radiusY;
-  if (Math.abs(yNorm) > 1) return centerX;
-  const xOffset = radiusX * Math.sqrt(1 - yNorm * yNorm);
-  return centerX - xOffset;
+// Helper function to calculate ellipse intersection point (matching CPUDatapath.tsx exactly)
+function getEllipseXIntersect(xOffset: number, y: number, xRadius: number, yRadius: number): number {
+  return xOffset + xRadius + xRadius * Math.sqrt(1 - ((y * y) / (yRadius * yRadius)));
 }
 
 /**
  * Wire path for Unconditional Branch control signal from Control unit to BranchOr gate
  */
 export const CONTROL_UNCONDITIONAL_BRANCH_SIGNAL_PATH = {
-  getPathPoints: (components: any, verticalLines: any): Point[] => {
+  getPathPoints: (components: any, verticalLines: any, scale: number = 1): Point[] => {
     if (!components || !components.Control || !components.BranchOR) {
       return [];
     }
 
     const control = components.Control;
     const branchOR = components.BranchOR;
+    
+    // Constants matching CPUDatapath.tsx exactly
+    const CONTROL_OFFSET = 2.5 * scale;
+    const CONTROL_PADDING = ((160 - 2 * 2.5) / 9) * scale;  // (CONTROL_HEIGHT - 2*CONTROL_OFFSET)/9 for 9 signals
     
     // Start from Control unit's Unconditional Branch output (exact match with CPUDatapath.tsx)
     const startX = getEllipseXIntersect(control.x, 
