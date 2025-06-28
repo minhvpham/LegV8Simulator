@@ -2465,12 +2465,6 @@ const CPUDatapath: React.FC = () => {
           <div className="mt-2 text-xs">
             <div className="text-blue-200">PC Address:</div>
             <div className="font-mono text-green-300">0x{cpu.pc.toString(16).toUpperCase().padStart(8, '0')}</div>
-            <div className="text-blue-200 mt-1">Machine Code:</div>
-            <div className="font-mono text-yellow-300">0x{cpu.currentInstruction.machineCode}</div>
-            <div className="text-blue-200 mt-1">Zero Flag:</div>
-            <div className={`font-mono ${cpu.flags.zero ? 'text-green-300' : 'text-red-300'}`}>
-              {cpu.flags.zero ? '1' : '0'}
-            </div>
           </div>
         </div>
       )}
