@@ -2179,7 +2179,9 @@ export class InstructionAnimationController {
               if (!isNaN(registerIndex) && registerIndex >= 0 && registerIndex <= 31) {
                 // XZR (register 31) always returns 0, others read from CPU state
                 const registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
-                newValue = `0x${registerValue.toString(16).toUpperCase().padStart(8, '0')}`;
+                // newValue = `0x${registerValue.toString(16).toUpperCase().padStart(8, '0')}`;
+                // using binary representation
+                newValue = registerValue.toString(2).padStart(32, '0'); // 32-bit binary representation
                 console.log(`🎯 Transform resolved REGISTER_VALUE_FROM_INDEX: R${registerIndex} = ${newValue} (binary index: ${sourceCircle.dataValue})`);
               } else {
                 console.error(`🔴 Invalid register index for REGISTER_VALUE_FROM_INDEX: ${sourceCircle.dataValue}`);

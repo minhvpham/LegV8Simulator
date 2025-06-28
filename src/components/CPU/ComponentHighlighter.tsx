@@ -1,29 +1,31 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 
 export interface ComponentHighlight {
   componentId: string;
   highlightType: 'active' | 'processing' | 'complete' | 'split' | 'merge' | 'transform' | 'transfer';
   duration: number;
-  intensity?: number; // 0-1, for variable highlight intensity
-  wirePaths?: string[]; // Array of wire path IDs to highlight
+  intensity?: number;
+  wirePaths?: string[];
 }
 
 interface ComponentHighlighterProps {
   highlights: ComponentHighlight[];
   onHighlightComplete?: (componentId: string) => void;
-  componentCoordinates: Record<string, { x: number; y: number; width: number; height: number }>;
-  allowMultipleHighlights?: boolean; // NEW: Support multiple simultaneous highlights
+  componentCoordinates: { [key: string]: { x: number; y: number; width: number; height: number } };
+  allowMultipleHighlights?: boolean;
 }
 
 const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
   highlights,
   onHighlightComplete,
   componentCoordinates,
-  allowMultipleHighlights = true // Default to true for multi-circle support
+  allowMultipleHighlights = true
 }) => {
   const highlightRefs = useRef<Map<string, SVGRectElement>>(new Map());
-  const animationRefs = useRef<Map<string, gsap.core.Timeline>>(new Map());  // Color mapping for different highlight types
+  const animationRefs = useRef<Map<string, gsap.core.Timeline>>(new Map());
+
+  // Color mapping for different highlight types
   const getHighlightColor = (type: ComponentHighlight['highlightType']) => {
     switch (type) {
       case 'active':
@@ -69,6 +71,7 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
     
     return baseOpacity * intensity;
   };
+
   useEffect(() => {
     // If not allowing multiple highlights, clean up old animations
     if (!allowMultipleHighlights) {
@@ -94,7 +97,7 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
           // Kill existing animation for this component before starting new one
           animationRefs.current.get(componentId)?.kill();
         }
-        
+
         const color = getHighlightColor(highlightType);
         const opacity = getHighlightOpacity(highlightType, intensity);
         
@@ -108,7 +111,7 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
           opacity: 0
         });
         
-        // Create animation timeline
+        // Create animation timeline - SIMPLE COLOR FADE ONLY
         const tl = gsap.timeline({
           onComplete: () => {
             if (onHighlightComplete) {
@@ -119,109 +122,36 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
           }
         });
 
-        // Add special effects based on highlight type
-        switch (highlightType) {
-          case 'split':
-            // Split effect: rapid pulse to indicate data splitting
-            tl.to(highlightElement, {
-              duration: 0.1,
-              opacity: opacity,
-              ease: "power2.out"
-            });
-            tl.to(highlightElement, {
-              duration: 0.3,
-              opacity: opacity * 1.8,
-              scale: 1.05,
-              transformOrigin: "center",
-              yoyo: true,
-              repeat: 3,
-              ease: "power2.inOut"
-            });
-            break;
-            
-          case 'merge':
-            // Merge effect: convergence animation
-            tl.to(highlightElement, {
-              duration: 0.2,
-              opacity: opacity,
-              scale: 0.95,
-              transformOrigin: "center",
-              ease: "power2.out"
-            });
-            tl.to(highlightElement, {
-              duration: 0.4,
-              scale: 1.1,
-              opacity: opacity * 1.5,
-              ease: "elastic.out(1, 0.3)"
-            });
-            break;
-            
-          case 'transform':
-            // Transform effect: morphing animation
-            tl.to(highlightElement, {
-              duration: 0.15,
-              opacity: opacity,
-              ease: "power2.out"
-            });
-            tl.to(highlightElement, {
-              duration: 0.6,
-              opacity: opacity * 2,
-              scale: 1.15,
-              rotation: 360,
-              transformOrigin: "center",
-              ease: "power2.inOut"
-            });
-            break;
-            
-          case 'transfer':
-            // Transfer effect: sliding highlight
-            tl.to(highlightElement, {
-              duration: 0.2,
-              opacity: opacity,
-              ease: "power2.out"
-            });
-            tl.to(highlightElement, {
-              duration: 0.5,
-              x: component.x - 2,
-              y: component.y - 2,
-              opacity: opacity * 1.3,
-              ease: "power2.inOut"
-            });
-            break;
-            
-          default:
-            // Standard animations for active, processing, complete
-            tl.to(highlightElement, {
-              duration: 0.2,
-              opacity: opacity,
-              ease: "power2.out"
-            });
+        // Simple fade in/out animation - NO SPINNING, NO SCALING, NO ROTATION
+        // Fade in
+        tl.to(highlightElement, {
+          duration: 0.2,
+          opacity: opacity,
+          ease: "power2.out"
+        });
 
-            // Add pulsing effect for active components
-            if (highlightType === 'active') {
-              tl.to(highlightElement, {
-                duration: 0.5,
-                opacity: opacity * 1.5,
-                yoyo: true,
-                repeat: Math.floor((duration / 1000) / 0.5) - 1,
-                ease: "power2.inOut"
-              });
-            } else {
-              // Hold the highlight
-              tl.to(highlightElement, {
-                duration: (duration / 1000) - 0.4,
-                opacity: opacity
-              });
-            }
-            break;
+        // Hold the highlight with optional subtle pulsing for active components only
+        if (highlightType === 'active' && duration > 1000) {
+          // For longer durations, add subtle pulsing
+          tl.to(highlightElement, {
+            duration: 0.5,
+            opacity: opacity * 1.3,
+            yoyo: true,
+            repeat: Math.floor((duration / 1000) / 0.5) - 1,
+            ease: "power2.inOut"
+          });
+        } else {
+          // Hold the highlight at constant opacity
+          tl.to(highlightElement, {
+            duration: (duration / 1000) - 0.4,
+            opacity: opacity
+          });
         }
 
         // Fade out
         tl.to(highlightElement, {
           duration: 0.2,
           opacity: 0,
-          scale: 1, // Reset scale
-          rotation: 0, // Reset rotation
           ease: "power2.in"
         });
 
@@ -237,35 +167,22 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
     };
   }, []);
 
-  const setHighlightRef = useCallback((componentId: string) => (element: SVGRectElement | null) => {
-    if (element) {
-      highlightRefs.current.set(componentId, element);
-    } else {
-      highlightRefs.current.delete(componentId);
-    }
-  }, []);
-
-  // Create highlight overlays for all possible components
-  const allComponents = ['PC', 'InsMem', 'RegFile', 'DataMem', 'ALUMain', 'ALUPC', 'ALUBranch', 
-                        'Control', 'ALUControl', 'SignExtend', 'ShiftLeft2', 'Flags', 'FlagAND', 
-                        'ZeroAND', 'BranchOR', 'MuxPC', 'MuxReg2Loc', 'MuxReadReg', 'MuxReadMem'];
-
   return (
-    <g className="component-highlighter" style={{ zIndex: 999 }}>
-      {allComponents.map(componentId => (
+    <g className="component-highlighter">
+      {Object.keys(componentCoordinates).map((componentId) => (
         <rect
           key={componentId}
-          ref={setHighlightRef(componentId)}
-          x={0}
-          y={0}
-          width={0}
-          height={0}
-          fill="#22C55E"
+          ref={(el) => {
+            if (el) {
+              highlightRefs.current.set(componentId, el);
+            }
+          }}
+          className="component-highlight"
+          fill="transparent"
+          stroke="none"
           opacity={0}
           rx={4}
           ry={4}
-          pointerEvents="none"
-          data-highlight={componentId}
         />
       ))}
     </g>

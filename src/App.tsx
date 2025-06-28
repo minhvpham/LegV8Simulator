@@ -9,7 +9,6 @@ import './index.css';
 
 const App: React.FC = () => {
   const [showEditor, setShowEditor] = useState(true);
-  const { mode } = useSimulatorStore();
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
@@ -18,13 +17,6 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-2xl font-bold text-gray-900">LEGv8 CPU Simulator</h1>
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                mode === 'simulation' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-blue-100 text-blue-800'
-              }`}>
-                {mode === 'simulation' ? '🎬 Animation Mode' : '⚡ Realtime Mode'}
-              </div>
             </div>
             
             <button

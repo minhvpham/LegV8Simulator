@@ -1,16 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useSimulatorStore } from '../store/simulatorStore';
+import { instructionAnimationController } from '../utils/instructionAnimationController';
 
 const ControlPanel: React.FC = () => {
   const {
-    mode,
     isRunning,
     isPaused,
     animationSpeed,
     currentStep,
     totalSteps,
     cpu,
-    setMode,
     setAnimationSpeed,
     step,
     run,
@@ -20,6 +19,11 @@ const ControlPanel: React.FC = () => {
     loadProgram,
     setSourceCode,
   } = useSimulatorStore();
+
+  // Sync animation speed with the controller
+  useEffect(() => {
+    instructionAnimationController.setAnimationSpeed(animationSpeed);
+  }, [animationSpeed]);
 
   const loadSampleProgram = () => {
     const sampleCode = `; Sample LEGv8 Assembly Program
@@ -100,39 +104,18 @@ ADDI X11, XZR, #300`;
         </p>
       </div>
 
-      {/* Execution Controls */}
-      <div className="space-y-4">
+      {/* Step Control */}
+      <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Execution Control
+          Step Control
         </label>
-        
-        <div className="flex space-x-2">
-          <button
-            onClick={step}
-            disabled={isRunning && !isPaused}
-            className="flex-1 px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            ⏭️ Step
-          </button>
-          
-          <button
-            onClick={isRunning ? pause : run}
-            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-              isRunning
-                ? 'bg-cpu-red text-white hover:bg-red-600'
-                : 'bg-cpu-green text-white hover:bg-green-600'
-            }`}
-          >
-            {isRunning ? '⏸️ Pause' : '▶️ Run'}
-          </button>
-          
-          <button
-            onClick={reset}
-            className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
-          >
-            🔄 Reset
-          </button>
-        </div>
+        <button
+          onClick={step}
+          disabled={isRunning && !isPaused}
+          className="w-full px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          ⏭️ Single Step
+        </button>
       </div>
 
       {/* Animation Speed */}
@@ -149,10 +132,12 @@ ADDI X11, XZR, #300`;
           onChange={(e) => setAnimationSpeed(parseFloat(e.target.value))}
           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
         />
-        <div className="flex justify-between text-xs text-gray-500">
-          <span>0.1x</span>
-          <span>1x</span>
-          <span>3x</span>
+        <div className="relative">
+          <div className="flex justify-between text-xs text-gray-500">
+            <span>0.1x (Slow)</span>
+            <span style={{ position: 'absolute', left: '31%', transform: 'translateX(-50%)' }}>1x (Normal)</span>
+            <span>3x (Fast)</span>
+          </div>
         </div>
       </div>
 
@@ -176,16 +161,16 @@ ADDI X11, XZR, #300`;
         <label className="block text-sm font-medium text-gray-700">Status</label>
         <div className="text-sm space-y-1">
           <div className="flex justify-between">
-            <span>Mode:</span>
-            <span className="font-medium capitalize">{mode}</span>
-          </div>
-          <div className="flex justify-between">
             <span>State:</span>
             <span className={`font-medium ${
               isRunning ? 'text-cpu-green' : 'text-gray-600'
             }`}>
               {isRunning ? (isPaused ? 'Paused' : 'Running') : 'Stopped'}
             </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Speed:</span>
+            <span className="font-medium">{animationSpeed}x</span>
           </div>
           <div className="flex justify-between">
             <span>Instructions:</span>

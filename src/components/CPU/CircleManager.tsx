@@ -40,19 +40,6 @@ const CircleManager: React.FC<CircleManagerProps> = ({
 
   return (
     <g id="circle-manager">
-      {/* Debug info (only in development) */}
-      {process.env.NODE_ENV === 'development' && (
-        <text
-          x={10}
-          y={20}
-          fill="#666"
-          fontSize="12px"
-          fontFamily="monospace"
-        >
-          Active Circles: {activeCount}
-        </text>
-      )}
-
       {/* Render circles grouped by type */}
       {Object.entries(groupedCircles).map(([dataType, typeCircles]) => (
         <g key={dataType} className={`circle-group-${dataType}`}>

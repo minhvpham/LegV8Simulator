@@ -2453,45 +2453,7 @@ const CPUDatapath: React.FC = () => {
               />
             )}
           </g>
-        )}        {/* Debug info for animation state */}
-        {(isAnimating || activeCircles.size > 0) && (
-          <g>
-            <text 
-              x={50} 
-              y={50} 
-              fill="red" 
-              fontSize="15"
-            >
-              Animation Active: Path Length = {animationPath.length}
-            </text>
-            <text 
-              x={50} 
-              y={70} 
-              fill="red" 
-              fontSize="12"
-            >
-              Duration: {currentStageDuration}ms
-            </text>
-            <text 
-              x={50} 
-              y={90} 
-              fill="blue" 
-              fontSize="12"
-            >
-              Active Circles: {activeCircles.size}
-            </text>
-            {animationPath.length > 0 && (
-              <text 
-                x={50} 
-                y={110} 
-                fill="red" 
-                fontSize="10"
-              >
-                Path: {animationPath[0].x.toFixed(0)},{animationPath[0].y.toFixed(0)} to {animationPath[animationPath.length-1].x.toFixed(0)},{animationPath[animationPath.length-1].y.toFixed(0)}
-              </text>
-            )}
-          </g>
-        )}
+        )}        
        
       </svg>
 
@@ -2527,7 +2489,7 @@ const CPUDatapath: React.FC = () => {
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
           >
-            {phaseInProgress ? 'Processing...' : isAnimating ? 'Step Running...' : 'Next Stage'}
+            {phaseInProgress ? 'Processing...' : isAnimating ? 'Step Running...' : 'Next Step'}
           </button>
         </div>
       )}
@@ -2554,7 +2516,7 @@ const CPUDatapath: React.FC = () => {
               <span>Stage Running...</span>
             </div>
           ) : (
-            'Next Step'
+            'Next Instruction'
           )}
         </button>
       </div>

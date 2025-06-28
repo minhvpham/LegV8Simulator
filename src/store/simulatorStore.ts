@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { enableMapSet } from 'immer';
 import { SimulatorState, CPUState, Instruction, SimulationMode, Point, ComponentHighlight, DataCircle } from '../types';
 import { MachineCodeBreakdown, LEGv8InstructionParser } from '../utils/instructionMachineCodeParser';
+import { instructionAnimationController } from '../utils/instructionAnimationController';
 
 // Enable MapSet plugin for Immer to handle Maps and Sets
 enableMapSet();
@@ -1159,6 +1160,8 @@ export const useSimulatorStore = create<SimulatorStore>()(
     setAnimationSpeed: (speed) =>
       set((state) => {
         state.animationSpeed = speed;
+        // Update the animation controller with the new speed
+        instructionAnimationController.setAnimationSpeed(speed);
       }),
 
     loadProgram: (instructions) =>
