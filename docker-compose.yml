@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # Development service
+  legv8-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    stdin_open: true
+    tty: true
+    profiles:
+      - dev
+
+  # Production service
+  legv8-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "80:80"
+    profiles:
+      - prod
+
+  # Alternative development service without volume mounting (for sharing)
+  legv8-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    profiles:
+      - demo 
