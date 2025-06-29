@@ -1314,27 +1314,46 @@ export class InstructionAnimationController {
               operand1 = parseInt(rnValCircle.dataValue, 16);
             } else if (rnValCircle.dataValue.startsWith('0b')) {
               operand1 = parseInt(rnValCircle.dataValue.slice(2), 2);
+            } else if (/^[01]+$/.test(rnValCircle.dataValue) && rnValCircle.dataValue.length > 8) {
+              // Binary string - CHECK THIS FIRST before decimal check
+              const binaryStr = rnValCircle.dataValue;
+              operand1 = parseInt(binaryStr, 2);
+              
+              // Handle two's complement for 32-bit values if MSB is 1
+              if (binaryStr.length === 32 && binaryStr[0] === '1') {
+                operand1 = operand1 - Math.pow(2, 32);
+              }
             } else if (/^\d+$/.test(rnValCircle.dataValue)) {
               operand1 = parseInt(rnValCircle.dataValue, 10);
             } else {
-              // Try to parse as binary string (5-bit register indices)
-              operand1 = parseInt(rnValCircle.dataValue, 2);
+              // Try to parse as decimal fallback
+              operand1 = parseInt(rnValCircle.dataValue, 10) || 0;
             }
           } else {
             operand1 = Number(rnValCircle.dataValue);
           }
           
-          // Convert operand2 (D_ALUSrc_Mux_Out)
+          // Convert operand2 (D_ALUSrc_Mux_Out) - CHECK BINARY FIRST!
           if (typeof aluSrcMuxCircle.dataValue === 'string') {
             if (aluSrcMuxCircle.dataValue.startsWith('0x')) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue, 16);
             } else if (aluSrcMuxCircle.dataValue.startsWith('0b')) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue.slice(2), 2);
+            } else if (/^[01]+$/.test(aluSrcMuxCircle.dataValue) && aluSrcMuxCircle.dataValue.length > 8) {
+              // Binary string - CHECK THIS FIRST before decimal check
+              const binaryStr = aluSrcMuxCircle.dataValue;
+              operand2 = parseInt(binaryStr, 2);
+              
+              // Handle two's complement for sign-extended immediates
+              if (binaryStr.length >= 32 && binaryStr[0] === '1') {
+                // For negative immediates, apply two's complement
+                operand2 = operand2 - Math.pow(2, binaryStr.length);
+              }
             } else if (/^\d+$/.test(aluSrcMuxCircle.dataValue)) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue, 10);
             } else {
-              // Try to parse as binary string or sign-extended immediate
-              operand2 = parseInt(aluSrcMuxCircle.dataValue, 2);
+              // Try to parse as decimal fallback
+              operand2 = parseInt(aluSrcMuxCircle.dataValue, 10) || 0;
             }
           } else {
             operand2 = Number(aluSrcMuxCircle.dataValue);
@@ -1797,6 +1816,9 @@ export class InstructionAnimationController {
           const memWriteValue = memWriteCircle.dataValue.toString();
           const memAddress = memAddrCircle.dataValue.toString();
           const writeData = aluResultCircle.dataValue.toString();
+          // convert memAddress to integer / memaddress is string in binary format
+          const memAddressInt = parseInt(memAddress, 2);
+          const writeDataInt = parseInt(writeData, 2);
           
           console.log(`🔧 Memory Write Operation:`);
           console.log(`   - C_MemWrite: ${memWriteValue} (control signal)`);
@@ -1810,7 +1832,7 @@ export class InstructionAnimationController {
           // Implement memory write logic based on C_MemWrite control signal
           if (memWriteValue === '1') {
             // Create an announcement for memory write operation
-            resolvedData = `WRITE_TO_MEM[${memAddress}]=${writeData}`;
+            resolvedData = `WRITE_TO_MEM[${writeDataInt}]=${memAddressInt}`;
             console.log(`✅ MemWrite=1: Writing data ${writeData} to memory address ${memAddress}`);
             console.log(`✅ Memory Write Operation: ${resolvedData}`);
             
@@ -1912,8 +1934,9 @@ export class InstructionAnimationController {
           
           // Implement register write logic based on C_RegWrite control signal
           if (regWriteValue === '1') {
+            const writeAddressInt = parseInt(writeAddress, 2); // Convert binary string to integer
             // This is an ACTION that updates the Register File's state
-            resolvedData = `WRITE_TO_REG[X${writeAddress}]=${writeData}`;
+            resolvedData = `WRITE_TO_REG[X${writeAddressInt}]=${writeData}`;
             console.log(`✅ RegWrite=1: Writing data ${writeData} to register ${writeAddress}`);
             console.log(`✅ Register Write Operation: ${resolvedData}`);
             

@@ -63,6 +63,8 @@ The simulator implements a single-cycle LEGv8 processor with the following compo
 
 ### Option 1: Docker Setup (Recommended)
 
+**Prerequisites**: Make sure Docker Desktop is running before proceeding.
+
 #### Windows
 ```cmd
 # Clone the repository
@@ -103,12 +105,13 @@ npm run build
 
 1. **Launch the simulator** using one of the installation methods above
 2. **Access the application** at `http://localhost:3000`
-3. **Load a sample program** using the "Load Sample Program" button
-4. **Explore the interface**:
+3. **Load a sample program** using the "Load Sample Program" button or write your own code in the code editor
+4. **Compile your code**: After loading code or making any changes in the code editor, click the "Compile" button before proceeding
+5. **Explore the interface**:
    - Check the CPU State to see initial register values
    - Review the Machine Code Analysis for instruction details
    - Use "Next Step" in the CPU Datapath to watch data flow
-5. **Execute instructions** and observe real-time changes in all panels
+6. **Execute instructions** and observe real-time changes in all panels through animations
 
 ## 📚 Supported Instructions
 
