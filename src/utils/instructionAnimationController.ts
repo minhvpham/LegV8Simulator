@@ -6,6 +6,7 @@ import { FLOW_REGISTRY } from './instructionFlows/flowRegistry';
 import { AnimationSequencer, CircleAnimation, CircleAnimationWithDeps } from './animationSequencer';
 import { CPUStateExtractor } from './cpuStateExtractor';
 import { CPUState } from '../types';
+import { write } from 'fs';
 
 /**
  * Enhanced Animation Controller Class
@@ -1824,6 +1825,9 @@ export class InstructionAnimationController {
           const memWriteValue = memWriteCircle.dataValue.toString();
           const memAddress = memAddrCircle.dataValue.toString();
           const writeData = aluResultCircle.dataValue.toString();
+          // convert memAddress to integer / memaddress is string in binary format
+          const memAddressInt = parseInt(memAddress, 2);
+          const writeDataInt = parseInt(writeData, 2);
           
           console.log(`🔧 Memory Write Operation:`);
           console.log(`   - C_MemWrite: ${memWriteValue} (control signal)`);
@@ -1837,7 +1841,7 @@ export class InstructionAnimationController {
           // Implement memory write logic based on C_MemWrite control signal
           if (memWriteValue === '1') {
             // Create an announcement for memory write operation
-            resolvedData = `WRITE_TO_MEM[${memAddress}]=${writeData}`;
+            resolvedData = `WRITE_TO_MEM[${writeDataInt}]=${memAddressInt}`;
             console.log(`✅ MemWrite=1: Writing data ${writeData} to memory address ${memAddress}`);
             console.log(`✅ Memory Write Operation: ${resolvedData}`);
             
@@ -1925,6 +1929,7 @@ export class InstructionAnimationController {
           const regWriteValue = regWriteCircle.dataValue.toString();
           const writeAddress = writeAddrCircle.dataValue.toString();
           const writeData = regFileWriteCircle.dataValue.toString();
+          const writeAddressInt = parseInt(writeAddress, 2); // Convert binary string to integer
           
           console.log(`🔧 RegFile Write Commit Operation:`);
           console.log(`   - C_RegWrite: ${regWriteValue} (control signal)`);
@@ -1940,7 +1945,7 @@ export class InstructionAnimationController {
           // Implement register write logic based on C_RegWrite control signal
           if (regWriteValue === '1') {
             // This is an ACTION that updates the Register File's state
-            resolvedData = `WRITE_TO_REG[X${writeAddress}]=${writeData}`;
+            resolvedData = `WRITE_TO_REG[X${writeAddressInt}]=${writeData}`;
             console.log(`✅ RegWrite=1: Writing data ${writeData} to register ${writeAddress}`);
             console.log(`✅ Register Write Operation: ${resolvedData}`);
             
