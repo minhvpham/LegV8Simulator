@@ -57,12 +57,16 @@ B end
 end:
 ADDI X11, XZR, #300`;
 
-    setSourceCode(sampleCode);
+    processAssemblyCode(sampleCode);
+  };
+
+  const processAssemblyCode = (sourceCode: string) => {
+    setSourceCode(sourceCode);
     
-    // Parse and load the sample program
-    const lines = sampleCode.split('\n')
+    // Parse and load the program
+    const lines = sourceCode.split('\n')
       .map(line => line.trim())
-      .filter(line => line && !line.startsWith('//'));
+      .filter(line => line && !line.startsWith('//') && !line.startsWith(';'));
 
     const instructions = lines.map((line, index) => ({
       address: 0x400000 + index * 4,
@@ -75,6 +79,56 @@ ADDI X11, XZR, #300`;
     }));
 
     loadProgram(instructions);
+  };
+
+  const loadFileFromDevice = () => {
+    // Create a file input element
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.s,.asm,.legv8'; // Accept LEGv8 assembly file types
+    fileInput.style.display = 'none';
+
+    fileInput.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      // Check file type
+      const allowedExtensions = ['.s', '.asm', '.legv8'];
+      const fileName = file.name.toLowerCase();
+      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        alert(`Unsupported file type: ${fileExtension}\nPlease select a LEGv8 assembly file with extensions: ${allowedExtensions.join(', ')}`);
+        return;
+      }
+
+      // Read file content
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        if (content) {
+          try {
+            processAssemblyCode(content);
+            console.log(`Successfully loaded file: ${file.name}`);
+          } catch (error) {
+            console.error('Error processing assembly file:', error);
+            alert('Error processing the assembly file. Please check the file format and try again.');
+          }
+        }
+      };
+
+      reader.onerror = () => {
+        console.error('Error reading file:', file.name);
+        alert('Error reading the file. Please try again.');
+      };
+
+      reader.readAsText(file);
+    };
+
+    // Trigger file selection
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    document.body.removeChild(fileInput);
   };
 
   const handleStepInput = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,15 +147,24 @@ ADDI X11, XZR, #300`;
         <label className="block text-sm font-medium text-gray-700">
           Quick Start
         </label>
-        <button
-          onClick={loadSampleProgram}
-          className="w-full px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 transition-colors"
-        >
-          📝 Load Sample Program
-        </button>
-        <p className="text-xs text-gray-500">
-          Loads a sample LEGv8 program with various instruction types
-        </p>
+        <div className="space-y-2">
+          <button
+            onClick={loadSampleProgram}
+            className="w-full px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 transition-colors"
+          >
+            📝 Load Sample Program
+          </button>
+          <button
+            onClick={loadFileFromDevice}
+            className="w-full px-4 py-2 bg-cpu-blue text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+          >
+            📁 Load Assembly File
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 space-y-1">
+          <p>• Sample: Loads a built-in LEGv8 program with various instruction types</p>
+          <p>• File: Load your own LEGv8 assembly file (.s, .asm, .legv8)</p>
+        </div>
       </div>
 
       {/* Step Control */}
