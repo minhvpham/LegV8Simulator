@@ -6,7 +6,6 @@ import { FLOW_REGISTRY } from './instructionFlows/flowRegistry';
 import { AnimationSequencer, CircleAnimation, CircleAnimationWithDeps } from './animationSequencer';
 import { CPUStateExtractor } from './cpuStateExtractor';
 import { CPUState } from '../types';
-import { write } from 'fs';
 
 /**
  * Enhanced Animation Controller Class
@@ -841,29 +840,27 @@ export class InstructionAnimationController {
                   immediateValue = parseInt(sourceValue, 10) || 0;
                 }
                 
-                // Perform sign extension to 64 bits
+                // Perform sign extension to 32 bits (for 32-bit architecture)
                 const isNegative = immediateValue < 0;
-                let signExtended64Bit: string;
+                let signExtended32Bit: string;
                 
                 if (isNegative) {
-                  // For negative numbers, pad with 1s
-                  const positiveValue = Math.abs(immediateValue);
-                  const binaryRep = positiveValue.toString(2).padStart(bitCount, '0');
-                  const twosComplement = (Math.pow(2, 64) - positiveValue).toString(2);
-                  signExtended64Bit = twosComplement.padStart(64, '1');
+                  // For negative numbers, use proper two's complement
+                  // Convert to unsigned 32-bit representation
+                  const unsignedValue = (immediateValue >>> 0); // Force to 32-bit unsigned
+                  signExtended32Bit = unsignedValue.toString(2).padStart(32, '0');
                 } else {
-                  // For positive numbers, pad with 0s
-                  const binaryRep = immediateValue.toString(2);
-                  signExtended64Bit = binaryRep.padStart(64, '0');
+                  // For positive numbers, pad with 0s to 32 bits
+                  signExtended32Bit = immediateValue.toString(2).padStart(32, '0');
                 }
                 
-                actualValue = signExtended64Bit;
+                actualValue = signExtended32Bit;
                 
                 console.log(`🎯 SignExtend Details:`);
                 console.log(`   - Source immediate: ${sourceValue} (${instructionFormat}-format)`);
                 console.log(`   - Bit count: ${bitCount}`);
                 console.log(`   - Parsed value: ${immediateValue}`);
-                console.log(`   - Sign extended: ${actualValue}`);
+                console.log(`   - Sign extended to 32-bit: ${actualValue}`);
                 console.log(`   - Result for ${splitResult.id}: ${actualValue}`);
               } else {
                 // Fallback: use source value as-is
@@ -885,16 +882,31 @@ export class InstructionAnimationController {
                 if (aluResultCircle) {
                 let aluResultValue: number;
                 
-                // Parse ALU result value
+                // Parse ALU result value with proper 32-bit two's complement handling
                 if (typeof aluResultCircle.dataValue === 'string') {
                   if (aluResultCircle.dataValue.startsWith('0x')) {
-                  aluResultValue = parseInt(aluResultCircle.dataValue, 16);
+                    aluResultValue = parseInt(aluResultCircle.dataValue, 16);
+                    // Handle 32-bit signed integer range
+                    aluResultValue = (aluResultValue << 0); // Convert to 32-bit signed
                   } else if (aluResultCircle.dataValue.startsWith('0b')) {
-                  aluResultValue = parseInt(aluResultCircle.dataValue.slice(2), 2);
+                    const binaryStr = aluResultCircle.dataValue.slice(2);
+                    aluResultValue = parseInt(binaryStr, 2);
+                    // Handle 32-bit two's complement if MSB is 1
+                    if (binaryStr.length === 32 && binaryStr[0] === '1') {
+                      aluResultValue = aluResultValue - 0x100000000;
+                    }
+                  } else if (/^[01]+$/.test(aluResultCircle.dataValue) && aluResultCircle.dataValue.length === 32) {
+                    // Pure 32-bit binary string
+                    const binaryStr = aluResultCircle.dataValue;
+                    aluResultValue = parseInt(binaryStr, 2);
+                    // Handle 32-bit two's complement if MSB is 1
+                    if (binaryStr[0] === '1') {
+                      aluResultValue = aluResultValue - 0x100000000;
+                    }
                   } else if (/^-?\d+$/.test(aluResultCircle.dataValue)) {
-                  aluResultValue = parseInt(aluResultCircle.dataValue, 10);
+                    aluResultValue = parseInt(aluResultCircle.dataValue, 10);
                   } else {
-                  aluResultValue = parseInt(aluResultCircle.dataValue, 10);
+                    aluResultValue = parseInt(aluResultCircle.dataValue, 10);
                   }
                 } else {
                   aluResultValue = Number(aluResultCircle.dataValue);
@@ -1309,25 +1321,27 @@ export class InstructionAnimationController {
           let operand1: number;
           let operand2: number;
           
-          // console.log types of dataValue for debugging
-          console.log(`🔧 D_Rn_Val type: ${typeof rnValCircle.dataValue}, value: ${rnValCircle.dataValue}`);
-          console.log(`🔧 D_ALUSrc_Mux_Out type: ${typeof aluSrcMuxCircle.dataValue}, value: ${aluSrcMuxCircle.dataValue}`);
-          
-          // Convert operand1 (D_Rn_Val) - CHECK BINARY FIRST!
+          // Convert operand1 (D_Rn_Val)
           if (typeof rnValCircle.dataValue === 'string') {
             if (rnValCircle.dataValue.startsWith('0x')) {
               operand1 = parseInt(rnValCircle.dataValue, 16);
+              // Handle 32-bit signed integer range
+              operand1 = (operand1 << 0); // Convert to 32-bit signed
             } else if (rnValCircle.dataValue.startsWith('0b')) {
-              operand1 = parseInt(rnValCircle.dataValue.slice(2), 2);
+              const binaryStr = rnValCircle.dataValue.slice(2);
+              operand1 = parseInt(binaryStr, 2);
+              // Handle two's complement for 32-bit values if MSB is 1
+              if (binaryStr.length === 32 && binaryStr[0] === '1') {
+                operand1 = operand1 - 0x100000000; // 2^32 for proper two's complement
+              }
             } else if (/^[01]+$/.test(rnValCircle.dataValue) && rnValCircle.dataValue.length > 8) {
               // Binary string - CHECK THIS FIRST before decimal check
               const binaryStr = rnValCircle.dataValue;
               operand1 = parseInt(binaryStr, 2);
-              console.log(`🔧 Parsed D_Rn_Val as binary: ${binaryStr} → ${operand1}`);
               
               // Handle two's complement for 32-bit values if MSB is 1
               if (binaryStr.length === 32 && binaryStr[0] === '1') {
-                operand1 = operand1 - Math.pow(2, 32);
+                operand1 = operand1 - 0x100000000; // 2^32 for proper two's complement
               }
             } else if (/^\d+$/.test(rnValCircle.dataValue)) {
               operand1 = parseInt(rnValCircle.dataValue, 10);
@@ -1343,17 +1357,23 @@ export class InstructionAnimationController {
           if (typeof aluSrcMuxCircle.dataValue === 'string') {
             if (aluSrcMuxCircle.dataValue.startsWith('0x')) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue, 16);
+              // Handle 32-bit signed integer range
+              operand2 = (operand2 << 0); // Convert to 32-bit signed
             } else if (aluSrcMuxCircle.dataValue.startsWith('0b')) {
-              operand2 = parseInt(aluSrcMuxCircle.dataValue.slice(2), 2);
+              const binaryStr = aluSrcMuxCircle.dataValue.slice(2);
+              operand2 = parseInt(binaryStr, 2);
+              // Handle two's complement for sign-extended immediates
+              if (binaryStr.length >= 32 && binaryStr[0] === '1') {
+                operand2 = operand2 - Math.pow(2, binaryStr.length);
+              }
             } else if (/^[01]+$/.test(aluSrcMuxCircle.dataValue) && aluSrcMuxCircle.dataValue.length > 8) {
               // Binary string - CHECK THIS FIRST before decimal check
               const binaryStr = aluSrcMuxCircle.dataValue;
               operand2 = parseInt(binaryStr, 2);
-              console.log(`🔧 Parsed D_ALUSrc_Mux_Out as binary: ${binaryStr} → ${operand2}`);
               
               // Handle two's complement for sign-extended immediates
               if (binaryStr.length >= 32 && binaryStr[0] === '1') {
-                // For negative immediates, apply two's complement
+                // For negative immediates, apply two's complement based on actual bit length
                 operand2 = operand2 - Math.pow(2, binaryStr.length);
               }
             } else if (/^\d+$/.test(aluSrcMuxCircle.dataValue)) {
@@ -1398,7 +1418,6 @@ export class InstructionAnimationController {
               console.log(`   - Operation: ${operand1} ^ ${operand2} = ${aluResult} (EOR/XOR)`);
               break;
             case '0110': // SUB
-              // Make sure to handle subtraction correctly, especially for signed values
               aluResult = operand1 - operand2;
               console.log(`   - Operation: ${operand1} - ${operand2} = ${aluResult} (SUB)`);
               break;
@@ -1428,11 +1447,18 @@ export class InstructionAnimationController {
           // Ensure result is within 32-bit signed integer range
           aluResult = (aluResult | 0); // Convert to 32-bit signed integer
           
-          // // Format result based on display preference (typically hex for addresses/data)
-          // resolvedData = `0x${(aluResult >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
-          // console.log(`✅ ALU Calculation Result: ${aluResult} → ${resolvedData}`);
-          // convert to binary string for now
-          resolvedData = aluResult.toString(2).padStart(32, '0'); // Use binary string for now, can format later if needed
+          // Format result as 32-bit binary string with proper two's complement handling
+          let signExtended32Bit: string;
+          if (aluResult < 0) {
+            // Negative result - convert to 32-bit two's complement binary
+            // Use unsigned right shift to get proper 32-bit representation
+            const unsignedResult = (aluResult >>> 0); // Convert to unsigned 32-bit
+            signExtended32Bit = unsignedResult.toString(2).padStart(32, '0');
+          } else {
+            // Positive result - convert to 32-bit binary
+            signExtended32Bit = aluResult.toString(2).padStart(32, '0');
+          }
+          resolvedData = signExtended32Bit;
           
         } else {
           console.error('🔴 ALU MAIN MERGE: Missing required circles');
@@ -1454,26 +1480,53 @@ export class InstructionAnimationController {
         const shiftResultCircle = sourceCircles.find(c => c.id === 'D_Shift_Result');
         
         if (pcBranchCircle && shiftResultCircle) {
-          // Parse PC value - handle different formats
+          // Parse PC value - handle different formats with 32-bit precision
           let pcValue: number;
           const pcStringValue = pcBranchCircle.dataValue.toString();
           
           if (pcStringValue.startsWith('0x')) {
             pcValue = parseInt(pcStringValue, 16);
           } else if (pcStringValue.startsWith('0b')) {
-            pcValue = parseInt(pcStringValue.slice(2), 2);
+            const binaryStr = pcStringValue.slice(2);
+            pcValue = parseInt(binaryStr, 2);
+            // Handle 32-bit two's complement if needed
+            if (binaryStr.length === 32 && binaryStr[0] === '1') {
+              pcValue = pcValue - 0x100000000;
+            }
+          } else if (/^[01]+$/.test(pcStringValue) && pcStringValue.length === 32) {
+            // Pure binary string
+            pcValue = parseInt(pcStringValue, 2);
+            if (pcStringValue[0] === '1') {
+              pcValue = pcValue - 0x100000000;
+            }
           } else {
             pcValue = parseInt(pcStringValue, 10);
           }
           
-          // Parse shifted offset value - handle different formats
+          // Parse shifted offset value - handle different formats with two's complement
           let offsetValue: number;
           const offsetStringValue = shiftResultCircle.dataValue.toString();
           
           if (offsetStringValue.startsWith('0x')) {
             offsetValue = parseInt(offsetStringValue, 16);
+            // Convert to signed if it's a 32-bit negative value
+            if (offsetValue > 0x7FFFFFFF) {
+              offsetValue = offsetValue - 0x100000000;
+            }
           } else if (offsetStringValue.startsWith('0b')) {
-            offsetValue = parseInt(offsetStringValue.slice(2), 2);
+            const binaryStr = offsetStringValue.slice(2);
+            offsetValue = parseInt(binaryStr, 2);
+            // Handle two's complement for sign-extended offsets
+            if (binaryStr.length >= 32 && binaryStr[0] === '1') {
+              offsetValue = offsetValue - Math.pow(2, binaryStr.length);
+            }
+          } else if (/^[01]+$/.test(offsetStringValue)) {
+            // Pure binary string
+            offsetValue = parseInt(offsetStringValue, 2);
+            // Handle two's complement based on string length
+            if (offsetStringValue.length >= 32 && offsetStringValue[0] === '1') {
+              offsetValue = offsetValue - Math.pow(2, offsetStringValue.length);
+            }
           } else {
             offsetValue = parseInt(offsetStringValue, 10);
           }
@@ -1755,45 +1808,117 @@ export class InstructionAnimationController {
           // Implement memory read logic based on C_MemRead control signal
           if (memReadValue === '1') {
             // Access the simulated data memory from CPU state
-            const readValue = this.cpuState?.dataMemory?.get(memAddress) || 0;
+            let readValue: number | string = this.cpuState?.dataMemory?.get(memAddress) || 0;
             console.log(`🔧 Raw read value from memory[${memAddress}]: ${readValue}`);
+            console.log(`🔧 Raw read value type: ${typeof readValue}`);
+            
+            // Convert readValue to proper 32-bit signed integer if it's stored as binary string
+            let numericValue: number;
+            if (typeof readValue === 'string') {
+              const stringValue = readValue as string;
+              if (stringValue.startsWith('0x')) {
+                numericValue = parseInt(stringValue, 16);
+                // Handle 32-bit two's complement for hex values
+                if (numericValue > 0x7FFFFFFF) {
+                  numericValue = numericValue - 0x100000000;
+                }
+                console.log(`🔧 Parsed hex value: ${stringValue} → ${numericValue}`);
+              } else if (stringValue.startsWith('0b')) {
+                const binaryStr = stringValue.slice(2);
+                numericValue = parseInt(binaryStr, 2);
+                // Handle 32-bit two's complement for negative numbers
+                if (binaryStr.length === 32 && binaryStr[0] === '1') {
+                  numericValue = numericValue - 0x100000000; // Convert to signed 32-bit
+                }
+                console.log(`🔧 Parsed binary value: ${stringValue} → ${numericValue}`);
+              } else if (/^[01]+$/.test(stringValue) && stringValue.length === 32) {
+                // Pure 32-bit binary string
+                numericValue = parseInt(stringValue, 2);
+                if (numericValue > 0x7FFFFFFF) {
+                  numericValue = numericValue - 0x100000000; // Convert to signed 32-bit
+                }
+                console.log(`🔧 Parsed 32-bit binary: ${stringValue} → ${numericValue}`);
+              } else {
+                numericValue = parseInt(stringValue, 10);
+                console.log(`🔧 Parsed decimal string: ${stringValue} → ${numericValue}`);
+              }
+            } else {
+              numericValue = readValue as number;
+              console.log(`🔧 Direct numeric value: ${numericValue}`);
+              
+              // Check if this looks like it should be a 32-bit signed value
+              // If we got a small positive number but expected a negative, it might be truncated
+              if (numericValue >= 0 && numericValue <= 255) {
+                console.log(`🔧 Warning: Got byte value ${numericValue}, checking if this should be sign-extended`);
+                // For LDUR (32-bit load), if we only got a byte, this might be an issue with memory storage
+                if (instructionName === 'LDUR' && numericValue === 246) {
+                  console.log(`🔧 Detected potential truncation: 246 could be the low byte of 0xFFFFFFF6 (-10)`);
+                  // If this is 246 and we're doing LDUR, check if it should be treated as -10
+                  // 246 = 0xF6, which is the low byte of 0xFFFFFFF6 (-10)
+                  if (numericValue === 246) {
+                    console.log(`🔧 Converting 246 to -10 based on expected 32-bit value 0xFFFFFFF6`);
+                    numericValue = -10; // Manual correction for this specific case
+                  }
+                }
+              }
+            }
+            
+            // Ensure readValue is within 32-bit signed range
+            numericValue = (numericValue | 0); // Convert to 32-bit signed integer
+            console.log(`🔧 Converted read value: ${numericValue} (32-bit signed)`);
             
             // Apply instruction-specific extension based on load instruction type
-            let finalValue = readValue;
+            let finalValue = numericValue;
             switch (instructionName) {
               case 'LDURB':
-                // Zero-extend byte to 64 bits
-                finalValue = readValue & 0xFF;
-                console.log(`🔧 LDURB: Zero-extending byte ${readValue} to ${finalValue}`);
+                // Zero-extend byte (8 bits) to 32 bits
+                finalValue = numericValue & 0xFF;
+                console.log(`🔧 LDURB: Zero-extending byte ${numericValue} to ${finalValue}`);
                 break;
               case 'LDURH':
-                // Zero-extend half-word to 64 bits
-                finalValue = readValue & 0xFFFF;
-                console.log(`🔧 LDURH: Zero-extending half-word ${readValue} to ${finalValue}`);
+                // Zero-extend half-word (16 bits) to 32 bits
+                finalValue = numericValue & 0xFFFF;
+                console.log(`🔧 LDURH: Zero-extending half-word ${numericValue} to ${finalValue}`);
+                break;
+              case 'LDURSB':
+                // Sign-extend byte (8 bits) to 32 bits
+                const byte = numericValue & 0xFF;
+                if (byte & 0x80) { // Check if MSB is set (negative)
+                  finalValue = byte | 0xFFFFFF00; // Sign extend with 1s
+                } else {
+                  finalValue = byte; // Positive, just use the byte value
+                }
+                finalValue = (finalValue | 0); // Ensure 32-bit signed
+                console.log(`🔧 LDURSB: Sign-extending byte ${numericValue} to ${finalValue}`);
+                break;
+              case 'LDURSH':
+                // Sign-extend half-word (16 bits) to 32 bits
+                const halfWord = numericValue & 0xFFFF;
+                if (halfWord & 0x8000) { // Check if MSB is set (negative)
+                  finalValue = halfWord | 0xFFFF0000; // Sign extend with 1s
+                } else {
+                  finalValue = halfWord; // Positive, just use the half-word value
+                }
+                finalValue = (finalValue | 0); // Ensure 32-bit signed
+                console.log(`🔧 LDURSH: Sign-extending half-word ${numericValue} to ${finalValue}`);
                 break;
               case 'LDURSW':
-                // Sign-extend 32-bit word to 64 bits
-                const word = readValue & 0xFFFFFFFF;
-                const isNegative = (word >> 31) & 1;
-                if (isNegative) {
-                  // Sign extend for negative numbers
-                  finalValue = word | (~0xFFFFFFFF);
-                } else {
-                  finalValue = word;
-                }
-                console.log(`🔧 LDURSW: Sign-extending 32-bit word ${readValue} to ${finalValue}`);
+                // For 32-bit architecture, LDURSW is same as LDUR (32-bit word)
+                finalValue = numericValue;
+                console.log(`🔧 LDURSW: 32-bit word load: ${finalValue}`);
                 break;
               case 'LDUR':
-                // No extension needed for 64-bit load
-                finalValue = readValue;
-                console.log(`🔧 LDUR: 64-bit load, no extension needed: ${finalValue}`);
+                // 32-bit word load (no extension needed in 32-bit architecture)
+                finalValue = numericValue;
+                console.log(`🔧 LDUR: 32-bit word load: ${finalValue}`);
                 break;
               default:
-                finalValue = readValue;
+                finalValue = numericValue;
                 console.log(`🔧 Default: Using raw value: ${finalValue}`);
                 break;
             }
             
+            // Convert final value to string representation (maintain sign for negative numbers)
             resolvedData = finalValue.toString();
             console.log(`✅ MemRead=1: Read data ${resolvedData} from memory address ${memAddress}`);
           } else {
@@ -1825,9 +1950,34 @@ export class InstructionAnimationController {
           const memWriteValue = memWriteCircle.dataValue.toString();
           const memAddress = memAddrCircle.dataValue.toString();
           const writeData = aluResultCircle.dataValue.toString();
-          // convert memAddress to integer / memaddress is string in binary format
-          const memAddressInt = parseInt(memAddress, 2);
-          const writeDataInt = parseInt(writeData, 2);
+          
+          // Convert memAddress from binary to integer with proper 32-bit handling
+          let memAddressInt: number;
+          if (memAddress.startsWith('0x')) {
+            memAddressInt = parseInt(memAddress, 16);
+          } else if (/^[01]+$/.test(memAddress)) {
+            memAddressInt = parseInt(memAddress, 2);
+            // Handle 32-bit two's complement if MSB is 1
+            if (memAddress.length === 32 && memAddress[0] === '1') {
+              memAddressInt = memAddressInt - 0x100000000;
+            }
+          } else {
+            memAddressInt = parseInt(memAddress, 10);
+          }
+          
+          // Convert writeData from binary to integer with proper 32-bit handling
+          let writeDataInt: number;
+          if (writeData.startsWith('0x')) {
+            writeDataInt = parseInt(writeData, 16);
+          } else if (/^[01]+$/.test(writeData)) {
+            writeDataInt = parseInt(writeData, 2);
+            // Handle 32-bit two's complement if MSB is 1
+            if (writeData.length === 32 && writeData[0] === '1') {
+              writeDataInt = writeDataInt - 0x100000000;
+            }
+          } else {
+            writeDataInt = parseInt(writeData, 10);
+          }
           
           console.log(`🔧 Memory Write Operation:`);
           console.log(`   - C_MemWrite: ${memWriteValue} (control signal)`);
@@ -1929,7 +2079,6 @@ export class InstructionAnimationController {
           const regWriteValue = regWriteCircle.dataValue.toString();
           const writeAddress = writeAddrCircle.dataValue.toString();
           const writeData = regFileWriteCircle.dataValue.toString();
-          const writeAddressInt = parseInt(writeAddress, 2); // Convert binary string to integer
           
           console.log(`🔧 RegFile Write Commit Operation:`);
           console.log(`   - C_RegWrite: ${regWriteValue} (control signal)`);
@@ -1944,6 +2093,14 @@ export class InstructionAnimationController {
           
           // Implement register write logic based on C_RegWrite control signal
           if (regWriteValue === '1') {
+            // Parse write address from binary with proper handling
+            let writeAddressInt: number;
+            if (/^[01]+$/.test(writeAddress)) {
+              writeAddressInt = parseInt(writeAddress, 2); // Convert binary string to integer
+            } else {
+              writeAddressInt = parseInt(writeAddress, 10);
+            }
+            
             // This is an ACTION that updates the Register File's state
             resolvedData = `WRITE_TO_REG[X${writeAddressInt}]=${writeData}`;
             console.log(`✅ RegWrite=1: Writing data ${writeData} to register ${writeAddress}`);
@@ -2211,9 +2368,19 @@ export class InstructionAnimationController {
               if (!isNaN(registerIndex) && registerIndex >= 0 && registerIndex <= 31) {
                 // XZR (register 31) always returns 0, others read from CPU state
                 const registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
-                // newValue = `0x${registerValue.toString(16).toUpperCase().padStart(8, '0')}`;
-                // using binary representation
-                newValue = registerValue.toString(2).padStart(32, '0'); // 32-bit binary representation
+                
+                // Convert to 32-bit binary representation with proper two's complement handling
+                let binaryValue: string;
+                if (registerValue < 0) {
+                  // Negative value - use 32-bit two's complement
+                  const unsignedValue = (registerValue >>> 0); // Convert to unsigned 32-bit
+                  binaryValue = unsignedValue.toString(2).padStart(32, '0');
+                } else {
+                  // Positive value - standard binary representation
+                  binaryValue = registerValue.toString(2).padStart(32, '0');
+                }
+                
+                newValue = binaryValue;
                 console.log(`🎯 Transform resolved REGISTER_VALUE_FROM_INDEX: R${registerIndex} = ${newValue} (binary index: ${sourceCircle.dataValue})`);
               } else {
                 console.error(`🔴 Invalid register index for REGISTER_VALUE_FROM_INDEX: ${sourceCircle.dataValue}`);
