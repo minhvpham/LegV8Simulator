@@ -1308,33 +1308,58 @@ export class InstructionAnimationController {
           let operand1: number;
           let operand2: number;
           
-          // Convert operand1 (D_Rn_Val)
+          // console.log types of dataValue for debugging
+          console.log(`🔧 D_Rn_Val type: ${typeof rnValCircle.dataValue}, value: ${rnValCircle.dataValue}`);
+          console.log(`🔧 D_ALUSrc_Mux_Out type: ${typeof aluSrcMuxCircle.dataValue}, value: ${aluSrcMuxCircle.dataValue}`);
+          
+          // Convert operand1 (D_Rn_Val) - CHECK BINARY FIRST!
           if (typeof rnValCircle.dataValue === 'string') {
             if (rnValCircle.dataValue.startsWith('0x')) {
               operand1 = parseInt(rnValCircle.dataValue, 16);
             } else if (rnValCircle.dataValue.startsWith('0b')) {
               operand1 = parseInt(rnValCircle.dataValue.slice(2), 2);
+            } else if (/^[01]+$/.test(rnValCircle.dataValue) && rnValCircle.dataValue.length > 8) {
+              // Binary string - CHECK THIS FIRST before decimal check
+              const binaryStr = rnValCircle.dataValue;
+              operand1 = parseInt(binaryStr, 2);
+              console.log(`🔧 Parsed D_Rn_Val as binary: ${binaryStr} → ${operand1}`);
+              
+              // Handle two's complement for 32-bit values if MSB is 1
+              if (binaryStr.length === 32 && binaryStr[0] === '1') {
+                operand1 = operand1 - Math.pow(2, 32);
+              }
             } else if (/^\d+$/.test(rnValCircle.dataValue)) {
               operand1 = parseInt(rnValCircle.dataValue, 10);
             } else {
-              // Try to parse as binary string (5-bit register indices)
-              operand1 = parseInt(rnValCircle.dataValue, 2);
+              // Try to parse as decimal fallback
+              operand1 = parseInt(rnValCircle.dataValue, 10) || 0;
             }
           } else {
             operand1 = Number(rnValCircle.dataValue);
           }
           
-          // Convert operand2 (D_ALUSrc_Mux_Out)
+          // Convert operand2 (D_ALUSrc_Mux_Out) - CHECK BINARY FIRST!
           if (typeof aluSrcMuxCircle.dataValue === 'string') {
             if (aluSrcMuxCircle.dataValue.startsWith('0x')) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue, 16);
             } else if (aluSrcMuxCircle.dataValue.startsWith('0b')) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue.slice(2), 2);
+            } else if (/^[01]+$/.test(aluSrcMuxCircle.dataValue) && aluSrcMuxCircle.dataValue.length > 8) {
+              // Binary string - CHECK THIS FIRST before decimal check
+              const binaryStr = aluSrcMuxCircle.dataValue;
+              operand2 = parseInt(binaryStr, 2);
+              console.log(`🔧 Parsed D_ALUSrc_Mux_Out as binary: ${binaryStr} → ${operand2}`);
+              
+              // Handle two's complement for sign-extended immediates
+              if (binaryStr.length >= 32 && binaryStr[0] === '1') {
+                // For negative immediates, apply two's complement
+                operand2 = operand2 - Math.pow(2, binaryStr.length);
+              }
             } else if (/^\d+$/.test(aluSrcMuxCircle.dataValue)) {
               operand2 = parseInt(aluSrcMuxCircle.dataValue, 10);
             } else {
-              // Try to parse as binary string or sign-extended immediate
-              operand2 = parseInt(aluSrcMuxCircle.dataValue, 2);
+              // Try to parse as decimal fallback
+              operand2 = parseInt(aluSrcMuxCircle.dataValue, 10) || 0;
             }
           } else {
             operand2 = Number(aluSrcMuxCircle.dataValue);
@@ -1372,6 +1397,7 @@ export class InstructionAnimationController {
               console.log(`   - Operation: ${operand1} ^ ${operand2} = ${aluResult} (EOR/XOR)`);
               break;
             case '0110': // SUB
+              // Make sure to handle subtraction correctly, especially for signed values
               aluResult = operand1 - operand2;
               console.log(`   - Operation: ${operand1} - ${operand2} = ${aluResult} (SUB)`);
               break;
@@ -1404,7 +1430,8 @@ export class InstructionAnimationController {
           // // Format result based on display preference (typically hex for addresses/data)
           // resolvedData = `0x${(aluResult >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
           // console.log(`✅ ALU Calculation Result: ${aluResult} → ${resolvedData}`);
-          resolvedData = aluResult.toString(); // Use raw number for now, can format later if needed
+          // convert to binary string for now
+          resolvedData = aluResult.toString(2).padStart(32, '0'); // Use binary string for now, can format later if needed
           
         } else {
           console.error('🔴 ALU MAIN MERGE: Missing required circles');
