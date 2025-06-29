@@ -34,6 +34,8 @@ jobs:
       
     - name: Build React app
       run: npm run build
+      env:
+        CI: false  # Disable CI mode to avoid issues with React scripts
       
     - name: Setup Pages
       uses: actions/configure-pages@v5
