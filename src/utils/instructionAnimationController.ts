@@ -6,6 +6,9 @@ import { FLOW_REGISTRY } from './instructionFlows/flowRegistry';
 import { AnimationSequencer, CircleAnimation, CircleAnimationWithDeps } from './animationSequencer';
 import { CPUStateExtractor } from './cpuStateExtractor';
 import { CPUState } from '../types';
+import { SplitDataValueCalculator } from './dataValueCalculators/splitDataValueCalculator';
+import { MergeDataValueCalculator } from './dataValueCalculators/mergeDataValueCalculator';
+import { TransformDataValueCalculator } from './dataValueCalculators/transformDataValueCalculator';
 
 /**
  * Enhanced Animation Controller Class
@@ -27,6 +30,18 @@ export class InstructionAnimationController {
   private animationSequencer: AnimationSequencer;
   private activeCircles: Map<string, DataCircle> = new Map();
   private stageDataFlows: StageDataFlow[] = [];
+  
+  // Stage history tracking for replay functionality
+  private stageHistory: Map<number, {
+    initialCircles: Map<string, DataCircle>;
+    finalCircles: Map<string, DataCircle>;
+    stageName: string;
+  }> = new Map();
+  
+  // Data value calculators
+  private splitCalculator: SplitDataValueCalculator;
+  private mergeCalculator: MergeDataValueCalculator;
+  private transformCalculator: TransformDataValueCalculator;
     // Callback functions for animation events
   private callbacks = {
     onStageStart: (stage: ExecutionStage, stageIndex: number, wirePath?: Point[]) => {},
@@ -46,6 +61,11 @@ export class InstructionAnimationController {
   constructor() {
     this.circleManager = new DataCircleManager();
     this.animationSequencer = new AnimationSequencer();
+    
+    // Initialize data value calculators
+    this.splitCalculator = new SplitDataValueCalculator();
+    this.mergeCalculator = new MergeDataValueCalculator();
+    this.transformCalculator = new TransformDataValueCalculator();
     
     // Setup animation sequencer callbacks
     this.animationSequencer.setCallbacks({
@@ -88,6 +108,10 @@ export class InstructionAnimationController {
    */
   setCPUState(state: CPUState): void {
     this.cpuState = state;
+    // Update calculators with new CPU state
+    this.splitCalculator.setCPUState(state);
+    this.mergeCalculator.setCPUState(state);
+    this.transformCalculator.setCPUState(state);
   }
 
   /**
@@ -95,6 +119,11 @@ export class InstructionAnimationController {
    */
   setMachineCodeBreakdown(machineCode: any): void {
     this.machineCodeBreakdown = machineCode;
+    // Update calculators with new machine code breakdown
+    this.splitCalculator.setMachineCodeBreakdown(machineCode);
+    this.mergeCalculator.setMachineCodeBreakdown(machineCode);
+    this.transformCalculator.setMachineCodeBreakdown(machineCode);
+    
     console.log('🔧 Machine code breakdown set:', machineCode);
     if (machineCode?.machineCode32Bit) {
       console.log(`🔧 32-bit machine code: ${machineCode.machineCode32Bit}`);
@@ -139,7 +168,7 @@ export class InstructionAnimationController {
 
     try {
       // Clear previous circles when starting new instruction
-      this.clearAllCircles();
+      await this.clearAllCircles();
 
       // Get instruction opcode
       const opcode = instruction.trim().split(/\s+/)[0].toUpperCase();
@@ -175,10 +204,6 @@ export class InstructionAnimationController {
     
     // Get actual PC value from CPU state
     let pcValue: string | number = 'PC_VALUE';
-    // if (this.cpuState) {
-    //   const { value } = CPUStateExtractor.extractComponentData('pc', this.cpuState, { displayFormat: 'hex' });
-    //   pcValue = value;
-    // }
     
     const initialCircle = this.circleManager.createCircle(
       pcValue, // Now uses actual PC value from CPU state
@@ -295,11 +320,7 @@ export class InstructionAnimationController {
   }  /**
    * Execute split operation: one circle becomes multiple circles
    */  private async executeSplitOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
-    console.log('🔍 DEBUG: Executing split operation:', operation);
-    console.log('🎯 DEBUG: Requested sourceCircleIds:', operation.sourceCircleIds);
-    console.log('📋 DEBUG: Available active circles:', Array.from(this.activeCircles.keys()));
-    console.log('📊 DEBUG: Active circles map:', this.activeCircles);
-    
+  
     let sourceCircle: DataCircle | undefined;
     
     // Try to find source circle by ID first (exact match)
@@ -338,20 +359,16 @@ export class InstructionAnimationController {
           console.log('🔍 DEBUG: Trying general type-based fallback...');
           if (targetId.includes('instruction')) {
             sourceCircle = activeCircles.find(circle => circle.dataType === 'instruction');
-            console.log('🎯 DEBUG: Looking for instruction type, found:', sourceCircle?.id);
           } else if (targetId === 'D_PC_Plus_4' || targetId.includes('PC_Plus')) {
             sourceCircle = activeCircles.find(circle => circle.dataType === 'pc_value' && circle.id !== 'D_PC_Branch');
-            console.log('🎯 DEBUG: Looking for PC_Plus_4 type, found:', sourceCircle?.id);
           } else if (targetId.includes('Opcode') || targetId.toLowerCase().includes('opcode')) {
             // Specific handling for D_Opcode - look for instruction type, not pc type!
             sourceCircle = activeCircles.find(circle => 
               circle.id.toLowerCase().includes('opcode') || 
               (circle.dataType === 'instruction' && circle.dataValue.toString().includes('ADDI'))
             );
-            console.log('🎯 DEBUG: Looking for Opcode, found:', sourceCircle?.id);
           } else if (targetId.includes('PC') && !targetId.includes('Opcode')) {
             sourceCircle = activeCircles.find(circle => circle.dataType === 'pc_value');
-            console.log('🎯 DEBUG: Looking for pc type, found:', sourceCircle?.id);
           }
         }
       }
@@ -451,566 +468,71 @@ export class InstructionAnimationController {
     const allComponents = [sourceComponent, ...targetComponents];
     this.highlightOperationComponents('split', allComponents);
 
-    // Create new circles from split with real CPU data
+    // Create new circles from split with real CPU data using calculator
     const newCircles: DataCircle[] = [];
     const animations: CircleAnimation[] = [];
+    
+    // Use split calculator to resolve all data values at once
+    const resolvedResults = this.splitCalculator.calculateSplitDataValues(operation, sourceCircle);
     
     // Track how many circles are going to each component for proper positioning
     const componentCircleCounts: Map<string, number> = new Map();
     
-    for (let i = 0; i < operation.results.length; i++) {
-      const splitResult = operation.results[i];
+    for (let i = 0; i < resolvedResults.length; i++) {
+      const resolvedResult = resolvedResults[i];
       
       // Debug logging for split operation order
-      console.log(`🔍 DEBUG Split ${i}: ID=${splitResult.id}, dataValue=${splitResult.dataValue}, targetComponent=${splitResult.targetComponent}`);
-      
-      // Resolve actual data value based on placeholder and CPU state
-      let actualValue: string | number = splitResult.dataValue;
-      
-      if (this.cpuState && typeof splitResult.dataValue === 'string') {
-        const placeholder = splitResult.dataValue.toUpperCase();
-        
-        switch (placeholder) {
-          case 'PC_ADDRESS':
-            // Current PC value in hex format
-            const currentPC = this.cpuState.pc;
-            actualValue = `0x${currentPC.toString(16).toUpperCase().padStart(8, '0')}`;
-            console.log(`🎯 Resolved PC_ADDRESS to: ${actualValue}`);
-            break;
-            
-          case 'PC_PLUS_4':
-            // PC+4 value in hex format
-            const pcPlus4 = this.cpuState.pc + 4;
-            actualValue = `0x${pcPlus4.toString(16).toUpperCase().padStart(8, '0')}`;
-            console.log(`🎯 Resolved PC_PLUS_4 to: ${actualValue}`);
-            break;
-            
-          case 'INSTRUCTION_BINARY':
-            // Machine code in binary format
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              actualValue = this.machineCodeBreakdown.machineCode32Bit;
-              console.log(`🎯 Resolved INSTRUCTION_BINARY to: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_HEX':
-            // Machine code in hex format
-            if (this.machineCodeBreakdown?.hexMachineCode) {
-              actualValue = `0x${this.machineCodeBreakdown.hexMachineCode}`;
-              console.log(`🎯 Resolved INSTRUCTION_HEX to: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_31_21':
-            // Opcode field [31-21] - 11 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const opcodeBits = binaryString.substring(0, 11); // Extract bits 31-21
-              actualValue = opcodeBits;
-              console.log(`🎯 Resolved INSTRUCTION_FIELD_31_21 to: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_20_16':
-            // Rm field [20-16] - 5 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rmBits = binaryString.substring(11, 16); // Extract bits 20-16
-              actualValue = rmBits;
-              console.log(`🎯 Resolved INSTRUCTION_FIELD_20_16 to: ${actualValue}`);
-              console.log(`🎯 For split result ID: ${splitResult.id}, setting value: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_9_5':
-            // Rn field [9-5] - 5 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rnBits = binaryString.substring(22, 27); // Extract bits 9-5 (positions 22-26)
-              actualValue = rnBits;
-              console.log(`🎯 Resolved INSTRUCTION_FIELD_9_5 to: ${actualValue} (from machine code: ${binaryString})`);
-              console.log(`🎯 Extracted from positions 22-26: ${binaryString.substring(22, 27)}`);
-              console.log(`🎯 For split result ID: ${splitResult.id}, setting value: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_4_0':
-            // Rd field [4-0] - 5 bits in pure binary
-            // For CB-Format: either register (CBZ/CBNZ) or condition code (B.COND)
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
-              
-              // Check if this is a CB-Format instruction
-              if (this.machineCodeBreakdown?.format === 'CB') {
-                const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-                
-                if (instructionName && instructionName.startsWith('B.')) {
-                  // B.COND instruction - Rt field contains condition code
-                  const conditionValue = parseInt(rdBits, 2);
-                  const conditionMap: { [key: number]: string } = {
-                    0: 'EQ',   // B.EQ: 00000
-                    1: 'NE',   // B.NE: 00001
-                    2: 'HS',   // B.HS: 00010 (also CS)
-                    3: 'LO',   // B.LO: 00011 (also CC)
-                    4: 'MI',   // B.MI: 00100
-                    5: 'PL',   // B.PL: 00101
-                    6: 'VS',   // B.VS: 00110
-                    7: 'VC',   // B.VC: 00111
-                    8: 'HI',   // B.HI: 01000
-                    9: 'LS',   // B.LS: 01001
-                    10: 'GE',  // B.GE: 01010
-                    11: 'LT',  // B.LT: 01011
-                    12: 'GT',  // B.GT: 01100
-                    13: 'LE',  // B.LE: 01101
-                    14: 'AL'   // B.AL: 01110
-                  };
-                  
-                  const conditionName = conditionMap[conditionValue] || 'UNKNOWN';
-                  actualValue = rdBits; // Keep binary for internal use
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format B.${conditionName}) to: ${actualValue} (condition code: ${conditionValue})`);
-                } else if (instructionName && (instructionName === 'CBZ' || instructionName === 'CBNZ')) {
-                  // CBZ/CBNZ instruction - Rt field contains register number
-                  const registerNumber = parseInt(rdBits, 2);
-                  actualValue = rdBits; // Keep binary for internal use
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format ${instructionName}) to: ${actualValue} (register X${registerNumber})`);
-                } else {
-                  // Default CB-Format handling
-                  actualValue = rdBits;
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format) to: ${actualValue}`);
-                }
-              } else {
-                // Non-CB-Format instruction - standard register field
-                actualValue = rdBits;
-                console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${actualValue}`);
-              }
-            }
-            break;
-          case 'INSTRUCTION_FIELD_31_0':
-            // Full instruction - all 32 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              actualValue = this.machineCodeBreakdown.machineCode32Bit;
-              console.log(`🎯 Resolved INSTRUCTION_FIELD_31_0 to: ${actualValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_IMMEDIATE_FIELD':
-            // Extract immediate field based on instruction format
-            if (this.machineCodeBreakdown?.machineCode32Bit && this.machineCodeBreakdown?.format) {
-              const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
-              const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
-              
-              console.log(`🎯 Extracting immediate field for ${instructionFormat}-format instruction`);
-              console.log(`🎯 Full instruction: ${instructionBinary}`);
-              
-              let extractedBits = '';
-              
-              // Extract immediate bits based on instruction format
-              switch (instructionFormat) {
-                case 'I':
-                  // I-Type: Extract bits [21:10] (12 bits)
-                  extractedBits = instructionBinary.substring(10, 22);
-                  console.log(`🎯 I-Type: Extracted immediate bits [21:10] = ${extractedBits}`);
-                  break;
-                  
-                case 'D':
-                  // D-Type: Extract bits [20:12] (9 bits)
-                  extractedBits = instructionBinary.substring(11, 20);
-                  console.log(`🎯 D-Type: Extracted immediate bits [20:12] = ${extractedBits}`);
-                  break;
-                  
-                case 'CB':
-                  // CB-Type: Extract bits [23:5] (19 bits)
-                  extractedBits = instructionBinary.substring(8, 27);
-                  console.log(`🎯 CB-Type: Extracted immediate bits [23:5] = ${extractedBits}`);
-                  break;
-                  
-                case 'B':
-                  // B-Type: Extract bits [25:0] (26 bits)
-                  extractedBits = instructionBinary.substring(6, 32);
-                  console.log(`🎯 B-Type: Extracted immediate bits [25:0] = ${extractedBits}`);
-                  break;
-                  
-                default:
-                  console.warn(`🔴 Unknown instruction format: ${instructionFormat}, defaulting to I-Type`);
-                  extractedBits = instructionBinary.substring(10, 22);
-                  break;
-              }
-              
-              actualValue = extractedBits;
-              console.log(`🎯 Resolved INSTRUCTION_IMMEDIATE_FIELD to: ${actualValue}`);
-            } else {
-              console.warn(`🔴 Cannot extract immediate field: missing machineCode32Bit or format`);
-              actualValue = '000000000000'; // Default 12-bit immediate
-            }
-            break;
-          case 'C_REGWRITE':
-            if (this.machineCodeBreakdown?.controlSignals?.regWrite !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.regWrite ? '1' : '0';
-              console.log(`🎯 Resolved C_REGWRITE to: ${actualValue}`);
-            }
-            break;
-          case 'C_ALUOP':
-            if (this.machineCodeBreakdown?.controlSignals?.aluOp) {
-              actualValue = this.machineCodeBreakdown.controlSignals.aluOp;
-              console.log(`🎯 Resolved C_ALUOP to: ${actualValue}`);
-            }
-            break;
-          case 'C_ALUSRC':
-            if (this.machineCodeBreakdown?.controlSignals?.aluSrc !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.aluSrc ? '1' : '0';
-              console.log(`🎯 Resolved C_ALUSRC to: ${actualValue}`);
-            }
-            break;
-          case 'C_MEMREAD':
-            if (this.machineCodeBreakdown?.controlSignals?.memRead !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.memRead ? '1' : '0';
-              console.log(`🎯 Resolved C_MEMREAD to: ${actualValue}`);
-            }
-            break;
-          case 'C_MEMWRITE':
-            if (this.machineCodeBreakdown?.controlSignals?.memWrite !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.memWrite ? '1' : '0';
-              console.log(`🎯 Resolved C_MEMWRITE to: ${actualValue}`);
-            }
-            break;
-          case 'C_REG2LOC':
-            if (this.machineCodeBreakdown?.controlSignals?.reg2Loc !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.reg2Loc ? '1' : '0';
-              console.log(`🎯 Resolved C_REG2LOC to: ${actualValue}`);
-            }
-            break;
-          case 'C_UNCONDBRANCH':
-            if (this.machineCodeBreakdown?.controlSignals?.uncondBranch !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.uncondBranch ? '1' : '0';
-              console.log(`🎯 Resolved C_UNCOND_BRANCH to: ${actualValue}`);
-            }
-            break;
-          case 'C_ZEROBRANCH':
-            if (this.machineCodeBreakdown?.controlSignals?.zeroBranch !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.zeroBranch ? '1' : '0';
-              console.log(`🎯 Resolved C_ZERO_BRANCH to: ${actualValue}`);
-            }
-            break;
-          case 'C_MEMTOREG':
-            if (this.machineCodeBreakdown?.controlSignals?.memToReg !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.memToReg ? '1' : '0';
-              console.log(`🎯 Resolved C_MEMTOREG to: ${actualValue}`);
-            }
-            break;
-          case 'C_FLAGWRITE':
-            if (this.machineCodeBreakdown?.controlSignals?.flagWrite !== undefined) {
-              actualValue = this.machineCodeBreakdown.controlSignals.flagWrite ? '1' : '0';
-              console.log(`🎯 Resolved C_FLAGWRITE to: ${actualValue}`);
-            }
-            break;
-          case 'C_ALUCONTROLOUT':
-            if (this.machineCodeBreakdown?.controlSignals?.aluControlOut) {
-              actualValue = this.machineCodeBreakdown.controlSignals.aluControlOut;
-              console.log(`🎯 Resolved C_ALUCONTROLOUT to: ${actualValue}`);
-            }
-            break;
-
-          case 'D_SIGNEXT_IMM':
-          case 'D_BRANCH_IMM':
-            // Sign extension logic for immediate values
-            if (this.machineCodeBreakdown?.machineCode32Bit && this.machineCodeBreakdown?.format) {
-              const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
-              const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
-              
-              console.log(`🎯 Sign Extension: Processing ${placeholder} for ${instructionFormat}-type instruction`);
-              console.log(`🎯 Full instruction: ${instructionBinary}`);
-              
-              let extractedBits = '';
-              let bitCount = 0;
-              
-              // Extract immediate bits based on instruction format
-              switch (instructionFormat) {
-                case 'I':
-                case 'I-TYPE':
-                  // I-Type: Extract bits [21:10] (12 bits)
-                  extractedBits = instructionBinary.substring(10, 22); // positions 10-21 (12 bits)
-                  bitCount = 12;
-                  console.log(`🎯 I-Type: Extracted bits [21:10] = ${extractedBits}`);
-                  break;
-                  
-                case 'D':
-                case 'D-TYPE':
-                  // D-Type: Extract bits [20:12] (9 bits)
-                  extractedBits = instructionBinary.substring(11, 20); // positions 11-19 (9 bits)
-                  bitCount = 9;
-                  console.log(`🎯 D-Type: Extracted bits [20:12] = ${extractedBits}`);
-                  break;
-                  
-                case 'CB':
-                case 'CB-TYPE':
-                  // CB-Type: Extract bits [23:5] (19 bits)
-                  extractedBits = instructionBinary.substring(8, 27); // positions 8-26 (19 bits)
-                  bitCount = 19;
-                  console.log(`🎯 CB-Type: Extracted bits [23:5] = ${extractedBits}`);
-                  break;
-                  
-                case 'B':
-                case 'B-TYPE':
-                  // B-Type: Extract bits [25:0] (26 bits)
-                  extractedBits = instructionBinary.substring(6, 32); // positions 6-31 (26 bits)
-                  bitCount = 26;
-                  console.log(`🎯 B-Type: Extracted bits [25:0] = ${extractedBits}`);
-                  break;
-                  
-                default:
-                  console.warn(`🔴 Unknown instruction format: ${instructionFormat}, defaulting to I-Type`);
-                  extractedBits = instructionBinary.substring(10, 22); // Default to I-Type
-                  bitCount = 12;
-                  break;
-              }
-              
-              // Perform sign extension to 64 bits
-              if (extractedBits.length > 0) {
-                const msb = extractedBits[0]; // Most significant bit
-                const isNegative = msb === '1';
-                
-                // Calculate the number of bits to pad (64 - extracted bits)
-                const paddingBits = 32 - bitCount;
-                const paddingValue = isNegative ? '1' : '0';
-                const padding = paddingValue.repeat(paddingBits);
-                
-                // Create the 64-bit sign-extended value
-                const signExtended64Bit = padding + extractedBits;
-                
-                console.log(`🎯 Sign Extension Details:`);
-                console.log(`   - Extracted ${bitCount} bits: ${extractedBits}`);
-                console.log(`   - MSB: ${msb} (${isNegative ? 'negative' : 'positive'})`);
-                console.log(`   - Padding: ${paddingBits} bits of '${paddingValue}'`);
-                console.log(`   - Final 64-bit: ${signExtended64Bit}`);
-                
-                actualValue = signExtended64Bit
-                console.log(`🎯 Resolved ${placeholder} to: ${actualValue}`);
-              }
-            } else {
-              console.warn(`🔴 Cannot perform sign extension: missing machineCode32Bit or format`);
-              actualValue = placeholder; // Keep placeholder if no data available
-            }
-            break;
-          case 'D_REGREAD2_VAL_MUX':
-          case 'D_REGREAD2_VAL_DATAMEM':
-            // For split operations that should preserve the source circle's actual data value
-            if (this.cpuState && sourceCircle) {
-              // Use the actual data value from the source circle
-              actualValue = sourceCircle.dataValue;
-              console.log(`🎯 Resolved ${placeholder} to source circle value: ${actualValue}`);
-            }
-            break;
-            
-
-            default:
-            // Check if this is a SignExtend split operation
-            if (operation.targetComponent === 'SignExtend' && sourceCircle) {
-              // This is a SignExtend split - apply sign extension to the source circle's value
-              console.log(`🎯 SignExtend Split: Processing ${placeholder} from source: ${sourceCircle.dataValue}`);
-              
-              if (this.machineCodeBreakdown?.format) {
-                const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
-                let immediateValue: number;
-                let bitCount = 0;
-                
-                // Parse the immediate field from the source circle
-                const sourceValue = sourceCircle.dataValue.toString();
-                
-                // Determine bit count based on instruction format
-                switch (instructionFormat) {
-                  case 'I': bitCount = 12; break;  // I-Type: 12-bit immediate
-                  case 'D': bitCount = 9; break;   // D-Type: 9-bit immediate  
-                  case 'CB': bitCount = 19; break; // CB-Type: 19-bit immediate
-                  case 'B': bitCount = 26; break;  // B-Type: 26-bit immediate
-                  default: bitCount = 12; break;   // Default to I-Type
-                }
-                
-                // Convert binary string to number for sign extension
-                if (sourceValue.match(/^[01]+$/)) {
-                  // Source is binary string
-                  immediateValue = parseInt(sourceValue, 2);
-                  
-                  // Handle two's complement for negative values
-                  if (sourceValue[0] === '1' && sourceValue.length === bitCount) {
-                    immediateValue = immediateValue - Math.pow(2, bitCount);
-                  }
-                } else {
-                  // Source might be already converted, try parsing as number
-                  immediateValue = parseInt(sourceValue, 10) || 0;
-                }
-                
-                // Perform sign extension to 32 bits (for 32-bit architecture)
-                const isNegative = immediateValue < 0;
-                let signExtended32Bit: string;
-                
-                if (isNegative) {
-                  // For negative numbers, use proper two's complement
-                  // Convert to unsigned 32-bit representation
-                  const unsignedValue = (immediateValue >>> 0); // Force to 32-bit unsigned
-                  signExtended32Bit = unsignedValue.toString(2).padStart(32, '0');
-                } else {
-                  // For positive numbers, pad with 0s to 32 bits
-                  signExtended32Bit = immediateValue.toString(2).padStart(32, '0');
-                }
-                
-                actualValue = signExtended32Bit;
-                
-                console.log(`🎯 SignExtend Details:`);
-                console.log(`   - Source immediate: ${sourceValue} (${instructionFormat}-format)`);
-                console.log(`   - Bit count: ${bitCount}`);
-                console.log(`   - Parsed value: ${immediateValue}`);
-                console.log(`   - Sign extended to 32-bit: ${actualValue}`);
-                console.log(`   - Result for ${splitResult.id}: ${actualValue}`);
-              } else {
-                // Fallback: use source value as-is
-                actualValue = sourceCircle.dataValue;
-                console.log(`🎯 SignExtend fallback: Using source value ${actualValue}`);
-              }
-            } else {
-              // Keep original value if no placeholder match
-              console.log(`📋 Using original value for ${placeholder}: ${actualValue}`);
-            }
-            break;
-            case 'D_ALU_RESULT_MEM':
-            case 'D_ALU_RESULT_MUX':
-            case 'D_ALU_RESULT_ZERO':
-            // ALU Result split operation - get source ALU result and apply specific logic
-              if (this.cpuState && operation.sourceCircleIds.includes('D_ALU_Result')) {
-                const aluResultCircle = sourceCircle;
-                
-                if (aluResultCircle) {
-                let aluResultValue: number;
-                
-                // Parse ALU result value with proper 32-bit two's complement handling
-                if (typeof aluResultCircle.dataValue === 'string') {
-                  if (aluResultCircle.dataValue.startsWith('0x')) {
-                    aluResultValue = parseInt(aluResultCircle.dataValue, 16);
-                    // Handle 32-bit signed integer range
-                    aluResultValue = (aluResultValue << 0); // Convert to 32-bit signed
-                  } else if (aluResultCircle.dataValue.startsWith('0b')) {
-                    const binaryStr = aluResultCircle.dataValue.slice(2);
-                    aluResultValue = parseInt(binaryStr, 2);
-                    // Handle 32-bit two's complement if MSB is 1
-                    if (binaryStr.length === 32 && binaryStr[0] === '1') {
-                      aluResultValue = aluResultValue - 0x100000000;
-                    }
-                  } else if (/^[01]+$/.test(aluResultCircle.dataValue) && aluResultCircle.dataValue.length === 32) {
-                    // Pure 32-bit binary string
-                    const binaryStr = aluResultCircle.dataValue;
-                    aluResultValue = parseInt(binaryStr, 2);
-                    // Handle 32-bit two's complement if MSB is 1
-                    if (binaryStr[0] === '1') {
-                      aluResultValue = aluResultValue - 0x100000000;
-                    }
-                  } else if (/^-?\d+$/.test(aluResultCircle.dataValue)) {
-                    aluResultValue = parseInt(aluResultCircle.dataValue, 10);
-                  } else {
-                    aluResultValue = parseInt(aluResultCircle.dataValue, 10);
-                  }
-                } else {
-                  aluResultValue = Number(aluResultCircle.dataValue);
-                }
-                
-                console.log(`🎯 ALU Result Split: Processing ${splitResult.id} with ALU result: ${aluResultValue}`);
-                
-                // Get instruction format for context
-                const instructionFormat = this.machineCodeBreakdown?.format;
-                console.log(`🔧 Instruction format: ${instructionFormat}`);
-                
-                // Apply specific logic based on the split result ID
-                switch (splitResult.id) {
-                  case 'D_ALU_Result_Mem':
-                  // For DataMem: Pass through the ALU result as memory address
-                  actualValue = aluResultValue.toString();
-                  console.log(`✅ D_ALU_Result_Mem: ALU result = ${actualValue} (for memory address)`);
-                  break;
-                  
-                  case 'D_ALU_Result_Mux':
-                  // For MuxReadMem: Pass through the ALU result as potential write-back data
-                  actualValue = aluResultValue.toString();
-                  console.log(`✅ D_ALU_Result_Mux: ALU result = ${actualValue} (for write-back mux)`);
-                  break;
-                  
-                  case 'D_ALU_Result_Zero':
-                  // For ZeroAND: Calculate Zero flag (1 if ALU result is 0, 0 otherwise)
-                  const zeroFlag = (aluResultValue === 0) ? 1 : 0;
-                  actualValue = zeroFlag.toString();
-                  console.log(`✅ D_ALU_Result_Zero: ALU result ${aluResultValue} → Zero flag = ${zeroFlag}`);
-                  break;
-                  
-                  default:
-                  // Default: Pass through ALU result
-                  actualValue = aluResultValue.toString();
-                  console.log(`✅ ${splitResult.id}: ALU result = ${actualValue} (default pass-through)`);
-                  break;
-                }
-                } else {
-                console.error(`🔴 ALU Result Split: Could not find D_ALU_Result circle for ${splitResult.id}`);
-                actualValue = '0'; // Fallback value
-                }
-              } else {
-                console.warn(`🔴 ALU Result Split: No CPU state or D_ALU_Result source for ${splitResult.id}`);
-                actualValue = splitResult.dataValue; // Use placeholder value
-              }
-              break;
-        }
-      }
+      console.log(`🔍 DEBUG Split ${i}: ID=${resolvedResult.id}, dataValue=${resolvedResult.dataValue}, targetComponent=${resolvedResult.targetComponent}`);
       
       const newCircle = this.circleManager.createCircle(
-        actualValue, // Now uses resolved CPU data
-        splitResult.dataType as any,
+        resolvedResult.dataValue, // Uses resolved CPU data from calculator
+        resolvedResult.dataType as any,
         sourceCircle.position, // Start at source position
         stageName,
         sourceCircle.id // Parent ID
       );
       
-      // Use the ID from SplitResult
-      newCircle.id = splitResult.id;
-      
-      // Debug logging for D_Rn_Idx specifically
-      if (splitResult.id === 'D_Rn_Idx') {
-        console.log(`🔍 DEBUG D_Rn_Idx: splitResult.dataValue = ${splitResult.dataValue}`);
-        console.log(`🔍 DEBUG D_Rn_Idx: actualValue = ${actualValue}`);
-        console.log(`🔍 DEBUG D_Rn_Idx: newCircle.dataValue = ${newCircle.dataValue}`);
-        console.log(`🔍 DEBUG D_Rn_Idx: newCircle.id = ${newCircle.id}`);
-      }
+      // Use the ID from ResolvedResult
+      newCircle.id = resolvedResult.id;
       
       newCircles.push(newCircle);
       this.activeCircles.set(newCircle.id, newCircle);
       this.callbacks.onCircleCreate(newCircle);
       
       // Track component-specific circle count for proper positioning
-      const currentCount = componentCircleCounts.get(splitResult.targetComponent) || 0;
-      componentCircleCounts.set(splitResult.targetComponent, currentCount + 1);
+      const currentCount = componentCircleCounts.get(resolvedResult.targetComponent) || 0;
+      componentCircleCounts.set(resolvedResult.targetComponent, currentCount + 1);
       
       // Create move animation for each new circle
-      const targetPosition = this.getPositionWithOffset(splitResult.targetComponent, currentCount);
+      const targetPosition = this.getPositionWithOffset(resolvedResult.targetComponent, currentCount);
+      
+      // Get wire path from original operation.results for this resolved result
+      const originalSplitResult = operation.results?.find(r => r.id === resolvedResult.id);
       
       // Resolve wire path - check if it's a wire path object or coordinate array
       let wirePath: Point[];
-      if (splitResult.wirePath) {
-        if (Array.isArray(splitResult.wirePath)) {
+      if (originalSplitResult?.wirePath) {
+        if (Array.isArray(originalSplitResult.wirePath)) {
           // Direct coordinate array
-          wirePath = splitResult.wirePath;
-        } else if (splitResult.wirePath && typeof splitResult.wirePath.getPathPoints === 'function') {
+          wirePath = originalSplitResult.wirePath;
+        } else if (originalSplitResult.wirePath && typeof originalSplitResult.wirePath.getPathPoints === 'function') {
           // Wire path object - resolve using current components and verticalLines
-          wirePath = this.resolveWirePathObject(splitResult.wirePath);
+          wirePath = this.resolveWirePathObject(originalSplitResult.wirePath);
         } else {
           // Fallback to old method
           const sourceComponent = operation.targetComponent || 'PC';
-          wirePath = this.getWirePathBetweenComponents(sourceComponent, splitResult.targetComponent);
+          wirePath = this.getWirePathBetweenComponents(sourceComponent, resolvedResult.targetComponent);
         }
       } else {
         // Fallback to old method
         const sourceComponent = operation.targetComponent || 'PC';
-        wirePath = this.getWirePathBetweenComponents(sourceComponent, splitResult.targetComponent);
+        wirePath = this.getWirePathBetweenComponents(sourceComponent, resolvedResult.targetComponent);
       }
 
-      console.log(`Creating animation for circle ${newCircle.id} to component ${splitResult.targetComponent}`);
+      console.log(`Creating animation for circle ${newCircle.id} to component ${resolvedResult.targetComponent}`);
       console.log(`🎯 Circle ${newCircle.id} positioning: targetPosition = {x: ${targetPosition.x}, y: ${targetPosition.y}}, componentIndex = ${currentCount}`);
-      if (splitResult.id === 'D_Rn_Idx' || splitResult.id === 'D_Rm_Idx') {
-        console.log(`🔍 POSITION DEBUG ${splitResult.id}: value=${newCircle.dataValue}, target=${splitResult.targetComponent}, componentIndex=${currentCount}, pos={x:${targetPosition.x}, y:${targetPosition.y}}`);
+      if (resolvedResult.id === 'D_Rn_Idx' || resolvedResult.id === 'D_Rm_Idx') {
+        console.log(`🔍 POSITION DEBUG ${resolvedResult.id}: value=${newCircle.dataValue}, target=${resolvedResult.targetComponent}, componentIndex=${currentCount}, pos={x:${targetPosition.x}, y:${targetPosition.y}}`);
       }      animations.push({
         circleId: newCircle.id,
         operation: 'move',
@@ -1023,7 +545,7 @@ export class InstructionAnimationController {
           newCircle.opacity = Math.max(0.3, Math.min(0.3 + progress * 0.7, 1));
           // Update the circle's current component as it moves
           if (progress >= 0.8) {
-            (newCircle as any).currentComponent = splitResult.targetComponent;
+            (newCircle as any).currentComponent = resolvedResult.targetComponent;
           }
           this.callbacks.onCircleUpdate(newCircle);
         }
@@ -1142,989 +664,22 @@ export class InstructionAnimationController {
     }// Get target position for merge
     const targetPosition = this.getPositionWithOffset(operation.targetComponent, 0);
     
-    // // Create animations to move all source circles to merge point
-    // const convergenceAnimations: CircleAnimation[] = sourceCircles.map(circle => ({
-    //   circleId: circle.id,
-    //   operation: 'move',
-    //   duration: 500,
-    //   startPosition: circle.position,
-    //   endPosition: targetPosition,
-    //   path: this.getWirePathBetweenComponents(
-    //     this.getComponentNameFromPosition(circle.position),
-    //     operation.targetComponent
-    //   ),
-    //   onUpdate: (position: Point, progress: number) => {
-    //     circle.position = position;
-    //     circle.opacity = Math.max(1 - progress * 0.3, 0.4); // Slight fade as they converge
-    //     this.callbacks.onCircleUpdate(circle);
-    //   }
-    // }));
-
-    // // Execute convergence animations in parallel
-    // await this.animationSequencer.executeParallel(convergenceAnimations);    // Create merged circle with combined data
     let resolvedData = 'MERGED_DATA';
     let mergedId = 'MERGED_DATA';
     let mergedDataType = 'register_data';
     
     if (operation.results && operation.results.length > 0) {
       const result = operation.results[0]; // Take first result for merge
-      resolvedData = result.dataValue;
       mergedId = result.id;
       mergedDataType = result.dataType;
-      
-      // Special case: Reg2Loc Multiplexer Logic
-      if (operation.targetComponent === 'MuxReg2Loc' && 
-          operation.sourceCircleIds.includes('D_Rm_Idx') && 
-          operation.sourceCircleIds.includes('C_Reg2Loc') && 
-          operation.sourceCircleIds.includes('D_Rt_Idx')) {
-        
-        console.log('🎯 IMPLEMENTING REG2LOC MULTIPLEXER LOGIC');
-        
-        // Find the control signal value
-        const reg2LocCircle = sourceCircles.find(c => c.id === 'C_Reg2Loc');
-        const rmIdxCircle = sourceCircles.find(c => c.id === 'D_Rm_Idx');
-        const rtIdxCircle = sourceCircles.find(c => c.id === 'D_Rt_Idx');
-        
-        if (reg2LocCircle && rmIdxCircle && rtIdxCircle) {
-          const reg2LocValue = reg2LocCircle.dataValue.toString();
-          
-          console.log(`🔧 Reg2Loc = ${reg2LocValue}`);
-          console.log(`🔧 D_Rm_Idx = ${rmIdxCircle.dataValue} (Instruction [20-16])`);
-          console.log(`🔧 D_Rt_Idx = ${rtIdxCircle.dataValue} (Instruction [4-0])`);
-          
-          // Implement multiplexer logic
-          if (reg2LocValue === '0') {
-            // Select input 0: D_Rm_Idx (Instruction field [20-16])
-            resolvedData = rmIdxCircle.dataValue.toString();
-            console.log(`✅ Reg2Loc=0: Selected D_Rm_Idx = ${resolvedData}`);
-          } else {
-            // Select input 1: D_Rt_Idx_Mux (Instruction field [4-0])
-            resolvedData = rtIdxCircle.dataValue.toString();
-            console.log(`✅ Reg2Loc=1: Selected D_Rt_Idx = ${resolvedData}`);
-          }
-        } else {
-          console.error('🔴 REG2LOC MERGE: Missing required circles');
-          console.error(`reg2LocCircle: ${reg2LocCircle?.id}, rmIdxCircle: ${rmIdxCircle?.id}, rtIdxCircle: ${rtIdxCircle?.id}`);
-        }
-      }
-      
-      // Special case: ALU Control Signal Generation
-      if (operation.targetComponent === 'ALUControl' && 
-          operation.sourceCircleIds.includes('C_ALUOp') && 
-          operation.sourceCircleIds.includes('D_Funct')) {
-        
-        console.log('🎯 IMPLEMENTING ALU CONTROL SIGNAL GENERATION');
-        
-        // Find the ALUOp and function field values
-        const aluOpCircle = sourceCircles.find(c => c.id === 'C_ALUOp');
-        const functCircle = sourceCircles.find(c => c.id === 'D_Funct');
-        
-        if (aluOpCircle && functCircle) {
-          const aluOpValue = aluOpCircle.dataValue.toString();
-          const functValue = functCircle.dataValue.toString();
-          
-          console.log(`🔧 ALUOp = ${aluOpValue} (binary)`);
-          console.log(`🔧 D_Funct = ${functValue} (function field)`);
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Use ALU control output directly from machine code breakdown
-          if (this.machineCodeBreakdown?.controlSignals?.aluControlOut) {
-            resolvedData = this.machineCodeBreakdown.controlSignals.aluControlOut;
-            console.log(`✅ Using machineCode.controlSignals.aluControlOut = ${resolvedData} for ${instructionFormat}-format instruction`);
-          } else {
-            // Fallback to original logic if machine code breakdown is not available
-            console.warn('⚠️ Machine code breakdown not available, using fallback ALU control logic');
-            
-            // Generate ALU control signals based on ALUOp and function field
-            if (aluOpValue === '10') {
-              // Arithmetic/Logic instruction (both I-format and R-format): perform ADD operation for ADDI
-              resolvedData = '0010';
-              console.log(`✅ ALUOp=10 (Arithmetic): Generated ALU Control = ${resolvedData} (ADD)`);
-            } else if (aluOpValue === '01') {
-              // Branch instruction: use function field to determine operation
-              resolvedData = '0111'; // Set Less Than for branch comparisons
-              console.log(`✅ ALUOp=01 (Branch): Generated ALU Control = ${resolvedData} (Set Less Than)`);
-            } else if (aluOpValue === '00') {
-              // Load/Store instruction: perform ADD for address calculation
-              resolvedData = '0010';
-              console.log(`✅ ALUOp=00 (Load/Store): Generated ALU Control = ${resolvedData} (ADD for address)`);
-            } else {
-              // Other ALUOp values (11 = Move, etc.)
-              resolvedData = '1111'; // Pass through B operand
-              console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
-            }
-          }
-        } else {
-          console.error('🔴 ALU CONTROL MERGE: Missing required circles');
-          console.error(`aluOpCircle: ${aluOpCircle?.id}, functCircle: ${functCircle?.id}`);
-        }
-      }
-      
-      // Special case: ALU Source Multiplexer Logic
-      if (operation.targetComponent === 'MuxReadReg' && 
-          operation.sourceCircleIds.includes('D_RegRead2_Val_Mux') && 
-          operation.sourceCircleIds.includes('D_SignExt_Imm') && 
-          operation.sourceCircleIds.includes('C_ALUSrc')) {
-        
-        console.log('🎯 IMPLEMENTING ALUSRC MULTIPLEXER LOGIC');
-        
-        // Find the control signal and data values
-        const aluSrcCircle = sourceCircles.find(c => c.id === 'C_ALUSrc');
-        const regDataCircle = sourceCircles.find(c => c.id === 'D_RegRead2_Val_Mux');
-        const immDataCircle = sourceCircles.find(c => c.id === 'D_SignExt_Imm');
-        
-        if (aluSrcCircle && regDataCircle && immDataCircle) {
-          const aluSrcValue = aluSrcCircle.dataValue.toString();
-          
-          console.log(`🔧 C_ALUSrc = ${aluSrcValue} (control signal)`);
-          console.log(`🔧 D_RegRead2_Val_Mux = ${regDataCircle.dataValue} (from Register)`);
-          console.log(`🔧 D_SignExt_Imm = ${immDataCircle.dataValue} (from Immediate)`);
-          
-          // Get the instruction format to determine the logic
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Implement multiplexer logic based on ALUSrc control signal
-          if (aluSrcValue === '0') {
-            // Select input 0: Register data (for R-Type, CBZ)
-            resolvedData = regDataCircle.dataValue.toString();
-            console.log(`✅ ALUSrc=0: Selected Register data = ${resolvedData} (R-Type/CBZ)`);
-          } else {
-            // Select input 1: Immediate data (for I-Type, D-Type)
-            resolvedData = immDataCircle.dataValue.toString();
-            console.log(`✅ ALUSrc=1: Selected Immediate data = ${resolvedData} (I-Type/D-Type)`);
-          }
-        } else {
-          console.error('🔴 ALUSRC MUX MERGE: Missing required circles');
-          console.error(`aluSrcCircle: ${aluSrcCircle?.id}, regDataCircle: ${regDataCircle?.id}, immDataCircle: ${immDataCircle?.id}`);
-        }
-      }
-      
-      // Special case: ALU Main Calculation Logic
-      if (operation.targetComponent === 'ALUMain' && 
-          operation.sourceCircleIds.includes('D_Rn_Val') && 
-          operation.sourceCircleIds.includes('D_ALUSrc_Mux_Out') && 
-          operation.sourceCircleIds.includes('C_ALU_Func_Binary')) {
-        
-        console.log('🎯 IMPLEMENTING ALU MAIN CALCULATION LOGIC');
-        
-        // Find the required circles for ALU calculation
-        const rnValCircle = sourceCircles.find(c => c.id === 'D_Rn_Val');
-        const aluSrcMuxCircle = sourceCircles.find(c => c.id === 'D_ALUSrc_Mux_Out');
-        const aluFuncCircle = sourceCircles.find(c => c.id === 'C_ALU_Func_Binary');
-        
-        if (rnValCircle && aluSrcMuxCircle && aluFuncCircle) {
-          // Parse operands - handle both binary strings and numeric values
-          let operand1: number;
-          let operand2: number;
-          
-          // Convert operand1 (D_Rn_Val)
-          if (typeof rnValCircle.dataValue === 'string') {
-            if (rnValCircle.dataValue.startsWith('0x')) {
-              operand1 = parseInt(rnValCircle.dataValue, 16);
-              // Handle 32-bit signed integer range
-              operand1 = (operand1 << 0); // Convert to 32-bit signed
-            } else if (rnValCircle.dataValue.startsWith('0b')) {
-              const binaryStr = rnValCircle.dataValue.slice(2);
-              operand1 = parseInt(binaryStr, 2);
-              // Handle two's complement for 32-bit values if MSB is 1
-              if (binaryStr.length === 32 && binaryStr[0] === '1') {
-                operand1 = operand1 - 0x100000000; // 2^32 for proper two's complement
-              }
-            } else if (/^[01]+$/.test(rnValCircle.dataValue) && rnValCircle.dataValue.length > 8) {
-              // Binary string - CHECK THIS FIRST before decimal check
-              const binaryStr = rnValCircle.dataValue;
-              operand1 = parseInt(binaryStr, 2);
-              
-              // Handle two's complement for 32-bit values if MSB is 1
-              if (binaryStr.length === 32 && binaryStr[0] === '1') {
-                operand1 = operand1 - 0x100000000; // 2^32 for proper two's complement
-              }
-            } else if (/^\d+$/.test(rnValCircle.dataValue)) {
-              operand1 = parseInt(rnValCircle.dataValue, 10);
-            } else {
-              // Try to parse as decimal fallback
-              operand1 = parseInt(rnValCircle.dataValue, 10) || 0;
-            }
-          } else {
-            operand1 = Number(rnValCircle.dataValue);
-          }
-          
-          // Convert operand2 (D_ALUSrc_Mux_Out) - CHECK BINARY FIRST!
-          if (typeof aluSrcMuxCircle.dataValue === 'string') {
-            if (aluSrcMuxCircle.dataValue.startsWith('0x')) {
-              operand2 = parseInt(aluSrcMuxCircle.dataValue, 16);
-              // Handle 32-bit signed integer range
-              operand2 = (operand2 << 0); // Convert to 32-bit signed
-            } else if (aluSrcMuxCircle.dataValue.startsWith('0b')) {
-              const binaryStr = aluSrcMuxCircle.dataValue.slice(2);
-              operand2 = parseInt(binaryStr, 2);
-              // Handle two's complement for sign-extended immediates
-              if (binaryStr.length >= 32 && binaryStr[0] === '1') {
-                operand2 = operand2 - Math.pow(2, binaryStr.length);
-              }
-            } else if (/^[01]+$/.test(aluSrcMuxCircle.dataValue) && aluSrcMuxCircle.dataValue.length > 8) {
-              // Binary string - CHECK THIS FIRST before decimal check
-              const binaryStr = aluSrcMuxCircle.dataValue;
-              operand2 = parseInt(binaryStr, 2);
-              
-              // Handle two's complement for sign-extended immediates
-              if (binaryStr.length >= 32 && binaryStr[0] === '1') {
-                // For negative immediates, apply two's complement based on actual bit length
-                operand2 = operand2 - Math.pow(2, binaryStr.length);
-              }
-            } else if (/^\d+$/.test(aluSrcMuxCircle.dataValue)) {
-              operand2 = parseInt(aluSrcMuxCircle.dataValue, 10);
-            } else {
-              // Try to parse as decimal fallback
-              operand2 = parseInt(aluSrcMuxCircle.dataValue, 10) || 0;
-            }
-          } else {
-            operand2 = Number(aluSrcMuxCircle.dataValue);
-          }
-          
-          const aluFuncCode = aluFuncCircle.dataValue.toString();
-          
-          console.log(`🔧 ALU Calculation:`);
-          console.log(`   - Operand1 (D_Rn_Val): ${rnValCircle.dataValue} → ${operand1}`);
-          console.log(`   - Operand2 (D_ALUSrc_Mux_Out): ${aluSrcMuxCircle.dataValue} → ${operand2}`);
-          console.log(`   - Function Code (C_ALU_Func_Binary): ${aluFuncCode}`);
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Perform ALU calculation based on function code
-          let aluResult: number;
-          
-          switch (aluFuncCode) {
-            case '0000': // AND
-              aluResult = operand1 & operand2;
-              console.log(`   - Operation: ${operand1} & ${operand2} = ${aluResult} (AND)`);
-              break;
-            case '0001': // ORR
-              aluResult = operand1 | operand2;
-              console.log(`   - Operation: ${operand1} | ${operand2} = ${aluResult} (ORR)`);
-              break;
-            case '0010': // ADD
-              aluResult = operand1 + operand2;
-              console.log(`   - Operation: ${operand1} + ${operand2} = ${aluResult} (ADD)`);
-              break;
-            case '0011': // EOR (XOR)
-              aluResult = operand1 ^ operand2;
-              console.log(`   - Operation: ${operand1} ^ ${operand2} = ${aluResult} (EOR/XOR)`);
-              break;
-            case '0110': // SUB
-              aluResult = operand1 - operand2;
-              console.log(`   - Operation: ${operand1} - ${operand2} = ${aluResult} (SUB)`);
-              break;
-            case '0111': // Pass input B (for CBZ)
-              aluResult = operand2;
-              console.log(`   - Operation: Pass operand2 = ${aluResult} (CBZ)`);
-              break;
-            case '1000': // LSL (Left Shift Logical)
-              aluResult = operand1 << operand2;
-              console.log(`   - Operation: ${operand1} << ${operand2} = ${aluResult} (LSL)`);
-              break;
-            case '1001': // LSR (Logical Shift Right)
-              aluResult = operand1 >>> operand2; // Use unsigned right shift
-              console.log(`   - Operation: ${operand1} >>> ${operand2} = ${aluResult} (LSR)`);
-              break;
-            case '1110': // MOVK - Special case
-            case '1111': // MOVZ - Special case
-              aluResult = operand2; // Pass the immediate value
-              console.log(`   - Operation: Pass immediate = ${aluResult} (MOVK/MOVZ)`);
-              break;
-            default:
-              aluResult = 0;
-              console.log(`   - Operation: Unknown function code ${aluFuncCode}, defaulting to 0`);
-              break;
-          }
-          
-          // Ensure result is within 32-bit signed integer range
-          aluResult = (aluResult | 0); // Convert to 32-bit signed integer
-          
-          // Format result as 32-bit binary string with proper two's complement handling
-          let signExtended32Bit: string;
-          if (aluResult < 0) {
-            // Negative result - convert to 32-bit two's complement binary
-            // Use unsigned right shift to get proper 32-bit representation
-            const unsignedResult = (aluResult >>> 0); // Convert to unsigned 32-bit
-            signExtended32Bit = unsignedResult.toString(2).padStart(32, '0');
-          } else {
-            // Positive result - convert to 32-bit binary
-            signExtended32Bit = aluResult.toString(2).padStart(32, '0');
-          }
-          resolvedData = signExtended32Bit;
-          
-        } else {
-          console.error('🔴 ALU MAIN MERGE: Missing required circles');
-          console.error(`rnValCircle: ${rnValCircle?.id}, aluSrcMuxCircle: ${aluSrcMuxCircle?.id}, aluFuncCircle: ${aluFuncCircle?.id}`);
-          // Fallback to default value
-          resolvedData = '0x00000000';
-        }
-      }
-      
-      // Special case: Branch Address Calculation at ALUBranch
-      if (operation.targetComponent === 'ALUBranch' && 
-          operation.sourceCircleIds.includes('D_PC_Branch') && 
-          operation.sourceCircleIds.includes('D_Shift_Result')) {
-        
-        console.log('🎯 IMPLEMENTING BRANCH ADDRESS CALCULATION');
-        
-        // Find the PC and shifted offset values
-        const pcBranchCircle = sourceCircles.find(c => c.id === 'D_PC_Branch');
-        const shiftResultCircle = sourceCircles.find(c => c.id === 'D_Shift_Result');
-        
-        if (pcBranchCircle && shiftResultCircle) {
-          // Parse PC value - handle different formats with 32-bit precision
-          let pcValue: number;
-          const pcStringValue = pcBranchCircle.dataValue.toString();
-          
-          if (pcStringValue.startsWith('0x')) {
-            pcValue = parseInt(pcStringValue, 16);
-          } else if (pcStringValue.startsWith('0b')) {
-            const binaryStr = pcStringValue.slice(2);
-            pcValue = parseInt(binaryStr, 2);
-            // Handle 32-bit two's complement if needed
-            if (binaryStr.length === 32 && binaryStr[0] === '1') {
-              pcValue = pcValue - 0x100000000;
-            }
-          } else if (/^[01]+$/.test(pcStringValue) && pcStringValue.length === 32) {
-            // Pure binary string
-            pcValue = parseInt(pcStringValue, 2);
-            if (pcStringValue[0] === '1') {
-              pcValue = pcValue - 0x100000000;
-            }
-          } else {
-            pcValue = parseInt(pcStringValue, 10);
-          }
-          
-          // Parse shifted offset value - handle different formats with two's complement
-          let offsetValue: number;
-          const offsetStringValue = shiftResultCircle.dataValue.toString();
-          
-          if (offsetStringValue.startsWith('0x')) {
-            offsetValue = parseInt(offsetStringValue, 16);
-            // Convert to signed if it's a 32-bit negative value
-            if (offsetValue > 0x7FFFFFFF) {
-              offsetValue = offsetValue - 0x100000000;
-            }
-          } else if (offsetStringValue.startsWith('0b')) {
-            const binaryStr = offsetStringValue.slice(2);
-            offsetValue = parseInt(binaryStr, 2);
-            // Handle two's complement for sign-extended offsets
-            if (binaryStr.length >= 32 && binaryStr[0] === '1') {
-              offsetValue = offsetValue - Math.pow(2, binaryStr.length);
-            }
-          } else if (/^[01]+$/.test(offsetStringValue)) {
-            // Pure binary string
-            offsetValue = parseInt(offsetStringValue, 2);
-            // Handle two's complement based on string length
-            if (offsetStringValue.length >= 32 && offsetStringValue[0] === '1') {
-              offsetValue = offsetValue - Math.pow(2, offsetStringValue.length);
-            }
-          } else {
-            offsetValue = parseInt(offsetStringValue, 10);
-          }
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          
-          console.log(`🔧 Branch Address Calculation:`);
-          console.log(`   - PC Value (D_PC_Branch): ${pcStringValue} → ${pcValue}`);
-          console.log(`   - Shifted Offset (D_Shift_Result): ${offsetStringValue} → ${offsetValue}`);
-          console.log(`   - Instruction Format: ${instructionFormat}`);
-          
-          // Perform branch address calculation: PC + offset
-          const branchTargetAddress = pcValue + offsetValue;
-          
-          console.log(`   - Calculation: ${pcValue} + ${offsetValue} = ${branchTargetAddress}`);
-          console.log(`   - Branch Target Address: 0x${branchTargetAddress.toString(16).toUpperCase().padStart(8, '0')}`);
-          
-          // Format result as hex address
-          resolvedData = `0x${branchTargetAddress.toString(16).toUpperCase().padStart(8, '0')}`;
-          
-          console.log(`✅ Branch Address Calculation Result: ${resolvedData}`);
-        } else {
-          console.error('🔴 BRANCH ADDRESS CALCULATION: Missing required circles');
-          console.error(`pcBranchCircle: ${pcBranchCircle?.id}, shiftResultCircle: ${shiftResultCircle?.id}`);
-          // Fallback to default address
-          resolvedData = '0x00000000';
-        }
-      }
-      
-      // Special case: ZeroAND Gate Logic
-      if (operation.targetComponent === 'ZeroAND' && 
-          operation.sourceCircleIds.includes('D_ALU_Result_Zero') && 
-          operation.sourceCircleIds.includes('C_ZeroBranch')) {
-        
-        console.log('🎯 IMPLEMENTING ZEROAND GATE LOGIC');
-        
-        // Find the required circles for ZeroAND gate operation
-        const zeroFlagCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Zero');
-        const zeroBranchCircle = sourceCircles.find(c => c.id === 'C_ZeroBranch');
-        
-        if (zeroFlagCircle && zeroBranchCircle) {
-          // Parse the Zero flag (1 if ALU result was 0, else 0)
-          const zeroFlagValue = parseInt(zeroFlagCircle.dataValue.toString(), 10);
-          
-          // Parse the ZeroBranch control signal (1 for conditional branch instructions, else 0)
-          const zeroBranchValue = parseInt(zeroBranchCircle.dataValue.toString(), 10);
-          
-          console.log(`🔧 ZeroAND Gate Logic:`);
-          console.log(`   - D_ALU_Result_Zero (Zero flag): ${zeroFlagValue}`);
-          console.log(`   - C_ZeroBranch (control signal): ${zeroBranchValue}`);
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Perform logical AND operation
-          // Output is 1 only if both:
-          // 1. The instruction is a conditional branch (C_ZeroBranch=1)
-          // 2. The branch condition is met (D_ALU_Result_Zero=1 for CBZ, or other logic for CBNZ)
-          const andResult = zeroFlagValue & zeroBranchValue;
-          
-          resolvedData = andResult.toString();
-          
-          console.log(`✅ ZeroAND Gate Result: ${zeroFlagValue} AND ${zeroBranchValue} = ${resolvedData}`);
-          
-          if (instructionFormat === 'CB' || instructionFormat === 'CB-TYPE') {
-            if (andResult === 1) {
-              console.log(`✅ Conditional branch condition MET for ${instructionFormat}-format instruction`);
-            } else {
-              console.log(`✅ Conditional branch condition NOT MET for ${instructionFormat}-format instruction`);
-            }
-          }
-        } else {
-          console.error('🔴 ZEROAND GATE MERGE: Missing required circles');
-          console.error(`zeroFlagCircle: ${zeroFlagCircle?.id}, zeroBranchCircle: ${zeroBranchCircle?.id}`);
-        }
-      }
-      
-      // Special case: BranchOR Gate Logic
-      if (operation.targetComponent === 'BranchOR' && 
-          operation.sourceCircleIds.includes('C_UncondBranch') && 
-          operation.sourceCircleIds.includes('D_Branch_0')) {
-        
-        console.log('🎯 IMPLEMENTING BRANCHOR GATE LOGIC');
-        
-        // Find the required circles for BranchOR gate operation
-        const uncondBranchCircle = sourceCircles.find(c => c.id === 'C_UncondBranch');
-        const branch0Circle = sourceCircles.find(c => c.id === 'D_Branch_0');
-        
-        if (uncondBranchCircle && branch0Circle) {
-          // Step 1: Check for unconditional branch (B, BL, BR)
-          const isUnconditionalBranch = parseInt(uncondBranchCircle.dataValue.toString());
-          
-          // Step 2: Get the result from the CBZ/CBNZ logic (ZeroAND gate)
-          const isZeroBranchTaken = parseInt(branch0Circle.dataValue.toString());
-          
-          console.log(`🔧 BranchOR Gate Logic:`);
-          console.log(`   - C_UncondBranch: ${isUnconditionalBranch} (unconditional branch)`);
-          console.log(`   - D_Branch_0: ${isZeroBranchTaken} (CBZ/CBNZ result)`);
-          
-          // Step 3: Calculate if a B.cond branch is taken
-          let isFlagBranchTaken = 0;
-          
-          // Get instruction format and name from machine code breakdown
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-          
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          console.log(`🔧 Instruction name: ${instructionName}`);
-          
-          // Check if this is a flag-based conditional branch (B.cond instructions)
-          if (instructionName && instructionName.startsWith('B.') && instructionName.length > 2) {
-            console.log('🎯 Detected B.cond instruction, checking PSTATE flags');
-            
-            // Get current PSTATE flags from CPU state
-            if (this.cpuState?.flags) {
-              const PSTATE = {
-                N: this.cpuState.flags.negative ? 1 : 0,
-                Z: this.cpuState.flags.zero ? 1 : 0,
-                V: this.cpuState.flags.overflow ? 1 : 0,
-                C: this.cpuState.flags.carry ? 1 : 0
-              };
-              
-              console.log(`🚩 Current PSTATE flags: N=${PSTATE.N}, Z=${PSTATE.Z}, V=${PSTATE.V}, C=${PSTATE.C}`);
-              
-              // Extract condition code from instruction name (e.g., "B.EQ" -> "EQ")
-              const conditionCode = instructionName.substring(2);
-              console.log(`🔍 Condition code: ${conditionCode}`);
-              
-              // Implement condition checking logic based on ARM64 specifications
-              switch (conditionCode) {
-                case 'EQ': isFlagBranchTaken = (PSTATE.Z === 1) ? 1 : 0; break;        // Z = 1
-                case 'NE': isFlagBranchTaken = (PSTATE.Z === 0) ? 1 : 0; break;        // Z = 0
-                case 'MI': isFlagBranchTaken = (PSTATE.N === 1) ? 1 : 0; break;        // N = 1
-                case 'PL': isFlagBranchTaken = (PSTATE.N === 0) ? 1 : 0; break;        // N = 0
-                case 'VS': isFlagBranchTaken = (PSTATE.V === 1) ? 1 : 0; break;        // V = 1
-                case 'VC': isFlagBranchTaken = (PSTATE.V === 0) ? 1 : 0; break;        // V = 0
-                case 'HI': isFlagBranchTaken = (PSTATE.C === 1 && PSTATE.Z === 0) ? 1 : 0; break; // C = 1 & Z = 0
-                case 'LS': isFlagBranchTaken = !(PSTATE.C === 1 && PSTATE.Z === 0) ? 1 : 0; break; // ~(C = 1 & Z = 0)
-                case 'GE': isFlagBranchTaken = (PSTATE.N === PSTATE.V) ? 1 : 0; break; // N = V
-                case 'LT': isFlagBranchTaken = (PSTATE.N !== PSTATE.V) ? 1 : 0; break; // N != V
-                case 'GT': isFlagBranchTaken = (PSTATE.Z === 0 && PSTATE.N === PSTATE.V) ? 1 : 0; break; // Z = 0 & N = V
-                case 'LE': isFlagBranchTaken = !(PSTATE.Z === 0 && PSTATE.N === PSTATE.V) ? 1 : 0; break; // ~(Z = 0 & N = V)
-                case 'HS': isFlagBranchTaken = (PSTATE.C === 1) ? 1 : 0; break;        // HS is alias for CS (C = 1)
-                case 'LO': isFlagBranchTaken = (PSTATE.C === 0) ? 1 : 0; break;        // LO is alias for CC (C = 0)
-                case 'AL': isFlagBranchTaken = 1; break;                               // Always
-                default:
-                  console.warn(`⚠️ Unknown condition code: ${conditionCode}`);
-                  isFlagBranchTaken = 0;
-                  break;
-              }
-              
-              console.log(`✅ B.${conditionCode} condition evaluation: ${isFlagBranchTaken ? 'TAKEN' : 'NOT TAKEN'}`);
-            } else {
-              console.warn('⚠️ CPU state flags not available for B.cond evaluation');
-              isFlagBranchTaken = 0;
-            }
-          } else {
-            console.log('🔧 Not a B.cond instruction, isFlagBranchTaken = 0');
-          }
-          
-          // Step 4: Perform the final OR operation
-          // Result is 1 if ANY type of branch should be taken
-          const branchOrResult = isUnconditionalBranch || isZeroBranchTaken || isFlagBranchTaken;
-          
-          resolvedData = branchOrResult.toString();
-          
-          console.log(`🔧 BranchOR Calculation:`);
-          console.log(`   - Unconditional Branch: ${isUnconditionalBranch}`);
-          console.log(`   - Zero Branch Taken: ${isZeroBranchTaken}`);
-          console.log(`   - Flag Branch Taken: ${isFlagBranchTaken}`);
-          console.log(`   - Final OR Result: ${branchOrResult}`);
-          console.log(`✅ BranchOR Gate Result: ${resolvedData} (${branchOrResult ? 'BRANCH TAKEN' : 'BRANCH NOT TAKEN'})`);
-          
-        } else {
-          console.error('🔴 BRANCHOR GATE MERGE: Missing required circles');
-          console.error(`uncondBranchCircle: ${uncondBranchCircle?.id}, branch0Circle: ${branch0Circle?.id}`);
-          // Fallback to default value
-          resolvedData = '0';
-        }
-      }
-      
-      // Special case: MuxPC - Final PC value selection (sequential vs branch)
-      if (operation.targetComponent === 'MuxPC' && 
-          operation.sourceCircleIds.includes('D_PC_Plus_4') && 
-          operation.sourceCircleIds.includes('D_Branch_Addr_Result') && 
-          operation.sourceCircleIds.includes('D_Branch_1')) {
-        
-        console.log('🎯 IMPLEMENTING MUXPC FINAL PC SELECTION LOGIC');
-        
-        // Find the required circles for PC multiplexer selection
-        const pcPlus4Circle = sourceCircles.find(c => c.id === 'D_PC_Plus_4');
-        const branchAddrCircle = sourceCircles.find(c => c.id === 'D_Branch_Addr_Result');
-        const branchSelectorCircle = sourceCircles.find(c => c.id === 'D_Branch_1');
-        
-        if (pcPlus4Circle && branchAddrCircle && branchSelectorCircle) {
-          // Get the dataValues from the source circles
-          const pcPlus4Value = pcPlus4Circle.dataValue.toString();
-          const branchTargetValue = branchAddrCircle.dataValue.toString();
-          const selectorValue = branchSelectorCircle.dataValue.toString();
-          
-          console.log(`🔧 MuxPC Final PC Selection:`);
-          console.log(`   - D_PC_Plus_4: ${pcPlus4Value} (sequential address)`);
-          console.log(`   - D_Branch_Addr_Result: ${branchTargetValue} (branch target address)`);
-          console.log(`   - D_Branch_1: ${selectorValue} (selector signal)`);
-          
-          // Get instruction format and name from machine code breakdown
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-          
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          console.log(`🔧 Instruction name: ${instructionName}`);
-          
-          let nextPCValue: string;
-          
-          // Special case for BR instruction: The branch target comes directly from register value
-          if (instructionName === 'BR') {
-            // For BR instructions, the selector will be 1, so this will always be chosen
-            nextPCValue = branchTargetValue;
-            console.log(`✅ BR instruction: Using register value as next PC = ${nextPCValue}`);
-          } else {
-            // Standard Mux logic for all other instructions
-            if (selectorValue === '1') {
-              // Branch is being taken
-              nextPCValue = branchTargetValue;
-              console.log(`✅ Branch taken: Next PC = ${nextPCValue} (branch target)`);
-            } else {
-              // No branch is being taken - continue sequentially
-              nextPCValue = pcPlus4Value;
-              console.log(`✅ Branch not taken: Next PC = ${nextPCValue} (sequential)`);
-            }
-          }
-          
-          // Assign the final result
-          resolvedData = nextPCValue;
-          
-          console.log(`🔧 Final MuxPC Selection Result: ${resolvedData}`);
-          console.log(`✅ Next instruction will be fetched from address: ${resolvedData}`);
-          
-        } else {
-          console.error('🔴 MUXPC MERGE: Missing required circles');
-          console.error(`pcPlus4Circle: ${pcPlus4Circle?.id}, branchAddrCircle: ${branchAddrCircle?.id}, branchSelectorCircle: ${branchSelectorCircle?.id}`);
-          // Fallback to sequential address if available
-          const fallbackPcCircle = sourceCircles.find(c => c.id === 'D_PC_Plus_4');
-          if (fallbackPcCircle) {
-            resolvedData = fallbackPcCircle.dataValue.toString();
-            console.log(`🔧 Fallback: Using sequential PC = ${resolvedData}`);
-          } else {
-            resolvedData = '0x00000000';
-          }
-        }
-      }
-      
-      // Special case: DataMem Memory Write Operation
-      // Memory Read Operation
-      else if (operation.targetComponent === 'DataMem' && 
-          operation.sourceCircleIds.includes('D_RegRead2_Val_DataMem') && 
-          operation.sourceCircleIds.includes('C_MemRead')) {
-        
-        console.log('🎯 IMPLEMENTING DATAMEM MEMORY READ OPERATION');
-        
-        // Find the required circles for memory read operation
-        const memAddressCircle = sourceCircles.find(c => c.id === 'D_RegRead2_Val_DataMem');
-        const memReadCircle = sourceCircles.find(c => c.id === 'C_MemRead');
-        
-        if (memAddressCircle && memReadCircle) {
-          const memReadValue = memReadCircle.dataValue.toString();
-          const memAddress = parseInt(memAddressCircle.dataValue.toString());
-          
-          console.log(`🔧 Memory Read Operation:`);
-          console.log(`   - C_MemRead: ${memReadValue} (control signal)`);
-          console.log(`   - D_ALU_Result_Mem: ${memAddress} (memory address)`);
-          
-          // Get instruction name from machine code breakdown
-          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-          console.log(`🔧 Instruction name: ${instructionName}`);
-          
-          // Implement memory read logic based on C_MemRead control signal
-          if (memReadValue === '1') {
-            // Access the simulated data memory from CPU state
-            let readValue: number | string = this.cpuState?.dataMemory?.get(memAddress) || 0;
-            console.log(`🔧 Raw read value from memory[${memAddress}]: ${readValue}`);
-            console.log(`🔧 Raw read value type: ${typeof readValue}`);
-            
-            // Convert readValue to proper 32-bit signed integer if it's stored as binary string
-            let numericValue: number;
-            if (typeof readValue === 'string') {
-              const stringValue = readValue as string;
-              if (stringValue.startsWith('0x')) {
-                numericValue = parseInt(stringValue, 16);
-                // Handle 32-bit two's complement for hex values
-                if (numericValue > 0x7FFFFFFF) {
-                  numericValue = numericValue - 0x100000000;
-                }
-                console.log(`🔧 Parsed hex value: ${stringValue} → ${numericValue}`);
-              } else if (stringValue.startsWith('0b')) {
-                const binaryStr = stringValue.slice(2);
-                numericValue = parseInt(binaryStr, 2);
-                // Handle 32-bit two's complement for negative numbers
-                if (binaryStr.length === 32 && binaryStr[0] === '1') {
-                  numericValue = numericValue - 0x100000000; // Convert to signed 32-bit
-                }
-                console.log(`🔧 Parsed binary value: ${stringValue} → ${numericValue}`);
-              } else if (/^[01]+$/.test(stringValue) && stringValue.length === 32) {
-                // Pure 32-bit binary string
-                numericValue = parseInt(stringValue, 2);
-                if (numericValue > 0x7FFFFFFF) {
-                  numericValue = numericValue - 0x100000000; // Convert to signed 32-bit
-                }
-                console.log(`🔧 Parsed 32-bit binary: ${stringValue} → ${numericValue}`);
-              } else {
-                numericValue = parseInt(stringValue, 10);
-                console.log(`🔧 Parsed decimal string: ${stringValue} → ${numericValue}`);
-              }
-            } else {
-              numericValue = readValue as number;
-              console.log(`🔧 Direct numeric value: ${numericValue}`);
-              
-              // Check if this looks like it should be a 32-bit signed value
-              // If we got a small positive number but expected a negative, it might be truncated
-              if (numericValue >= 0 && numericValue <= 255) {
-                console.log(`🔧 Warning: Got byte value ${numericValue}, checking if this should be sign-extended`);
-                // For LDUR (32-bit load), if we only got a byte, this might be an issue with memory storage
-                if (instructionName === 'LDUR' && numericValue === 246) {
-                  console.log(`🔧 Detected potential truncation: 246 could be the low byte of 0xFFFFFFF6 (-10)`);
-                  // If this is 246 and we're doing LDUR, check if it should be treated as -10
-                  // 246 = 0xF6, which is the low byte of 0xFFFFFFF6 (-10)
-                  if (numericValue === 246) {
-                    console.log(`🔧 Converting 246 to -10 based on expected 32-bit value 0xFFFFFFF6`);
-                    numericValue = -10; // Manual correction for this specific case
-                  }
-                }
-              }
-            }
-            
-            // Ensure readValue is within 32-bit signed range
-            numericValue = (numericValue | 0); // Convert to 32-bit signed integer
-            console.log(`🔧 Converted read value: ${numericValue} (32-bit signed)`);
-            
-            // Apply instruction-specific extension based on load instruction type
-            let finalValue = numericValue;
-            switch (instructionName) {
-              case 'LDURB':
-                // Zero-extend byte (8 bits) to 32 bits
-                finalValue = numericValue & 0xFF;
-                console.log(`🔧 LDURB: Zero-extending byte ${numericValue} to ${finalValue}`);
-                break;
-              case 'LDURH':
-                // Zero-extend half-word (16 bits) to 32 bits
-                finalValue = numericValue & 0xFFFF;
-                console.log(`🔧 LDURH: Zero-extending half-word ${numericValue} to ${finalValue}`);
-                break;
-              case 'LDURSB':
-                // Sign-extend byte (8 bits) to 32 bits
-                const byte = numericValue & 0xFF;
-                if (byte & 0x80) { // Check if MSB is set (negative)
-                  finalValue = byte | 0xFFFFFF00; // Sign extend with 1s
-                } else {
-                  finalValue = byte; // Positive, just use the byte value
-                }
-                finalValue = (finalValue | 0); // Ensure 32-bit signed
-                console.log(`🔧 LDURSB: Sign-extending byte ${numericValue} to ${finalValue}`);
-                break;
-              case 'LDURSH':
-                // Sign-extend half-word (16 bits) to 32 bits
-                const halfWord = numericValue & 0xFFFF;
-                if (halfWord & 0x8000) { // Check if MSB is set (negative)
-                  finalValue = halfWord | 0xFFFF0000; // Sign extend with 1s
-                } else {
-                  finalValue = halfWord; // Positive, just use the half-word value
-                }
-                finalValue = (finalValue | 0); // Ensure 32-bit signed
-                console.log(`🔧 LDURSH: Sign-extending half-word ${numericValue} to ${finalValue}`);
-                break;
-              case 'LDURSW':
-                // For 32-bit architecture, LDURSW is same as LDUR (32-bit word)
-                finalValue = numericValue;
-                console.log(`🔧 LDURSW: 32-bit word load: ${finalValue}`);
-                break;
-              case 'LDUR':
-                // 32-bit word load (no extension needed in 32-bit architecture)
-                finalValue = numericValue;
-                console.log(`🔧 LDUR: 32-bit word load: ${finalValue}`);
-                break;
-              default:
-                finalValue = numericValue;
-                console.log(`🔧 Default: Using raw value: ${finalValue}`);
-                break;
-            }
-            
-            // Convert final value to string representation (maintain sign for negative numbers)
-            resolvedData = finalValue.toString();
-            console.log(`✅ MemRead=1: Read data ${resolvedData} from memory address ${memAddress}`);
-          } else {
-            // MemRead = 0, no memory read operation - return 0 as default
-            resolvedData = 'NOT_DO_ANYTHING';
-            console.log(`✅ MemRead=0: No memory read operation`);
-          }
-        } else {
-          console.error('🔴 DATAMEM MEMORY READ: Missing required circles');
-          console.error(`memAddressCircle: ${memAddressCircle?.id}, memReadCircle: ${memReadCircle?.id}`);
-          // Fallback to default value
-          resolvedData = '0';
-        }
-      }
-      // Memory Write Operation
-      else if (operation.targetComponent === 'DataMem' && 
-          operation.sourceCircleIds.includes('D_DataMem_Addr_Ready') && 
-          operation.sourceCircleIds.includes('C_MemWrite') && 
-          operation.sourceCircleIds.includes('D_ALU_Result_Mem')) {
-        
-        console.log('🎯 IMPLEMENTING DATAMEM MEMORY WRITE OPERATION');
-        
-        // Find the required circles for memory write operation
-        const memAddrCircle = sourceCircles.find(c => c.id === 'D_DataMem_Addr_Ready');
-        const memWriteCircle = sourceCircles.find(c => c.id === 'C_MemWrite');
-        const aluResultCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mem');
-        
-        if (memAddrCircle && memWriteCircle && aluResultCircle) {
-          const memWriteValue = memWriteCircle.dataValue.toString();
-          const memAddress = memAddrCircle.dataValue.toString();
-          const writeData = aluResultCircle.dataValue.toString();
-          
-          // Convert memAddress from binary to integer with proper 32-bit handling
-          let memAddressInt: number;
-          if (memAddress.startsWith('0x')) {
-            memAddressInt = parseInt(memAddress, 16);
-          } else if (/^[01]+$/.test(memAddress)) {
-            memAddressInt = parseInt(memAddress, 2);
-            // Handle 32-bit two's complement if MSB is 1
-            if (memAddress.length === 32 && memAddress[0] === '1') {
-              memAddressInt = memAddressInt - 0x100000000;
-            }
-          } else {
-            memAddressInt = parseInt(memAddress, 10);
-          }
-          
-          // Convert writeData from binary to integer with proper 32-bit handling
-          let writeDataInt: number;
-          if (writeData.startsWith('0x')) {
-            writeDataInt = parseInt(writeData, 16);
-          } else if (/^[01]+$/.test(writeData)) {
-            writeDataInt = parseInt(writeData, 2);
-            // Handle 32-bit two's complement if MSB is 1
-            if (writeData.length === 32 && writeData[0] === '1') {
-              writeDataInt = writeDataInt - 0x100000000;
-            }
-          } else {
-            writeDataInt = parseInt(writeData, 10);
-          }
-          
-          console.log(`🔧 Memory Write Operation:`);
-          console.log(`   - C_MemWrite: ${memWriteValue} (control signal)`);
-          console.log(`   - D_DataMem_Addr_Ready: ${memAddress} (memory address)`);
-          console.log(`   - D_ALU_Result_Mem: ${writeData} (data to write)`);
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Implement memory write logic based on C_MemWrite control signal
-          if (memWriteValue === '1') {
-            // Create an announcement for memory write operation
-            resolvedData = `WRITE_TO_MEM[${writeDataInt}]=${memAddressInt}`;
-            console.log(`✅ MemWrite=1: Writing data ${writeData} to memory address ${memAddress}`);
-            console.log(`✅ Memory Write Operation: ${resolvedData}`);
-            
-            // This will create a temporary visual indicator that will disappear after 100ms
-            // The actual memory write operation would be handled by the CPU state
-          } else {
-            // MemWrite = 0, no memory write operation
-            resolvedData = 'NO_MEMORY_WRITE';
-            console.log(`✅ MemWrite=0: No memory write operation for ${instructionFormat}-format instruction`);
-          }
-        } else {
-          console.error('🔴 DATAMEM MEMORY WRITE: Missing required circles');
-          console.error(`memAddrCircle: ${memAddrCircle?.id}, memWriteCircle: ${memWriteCircle?.id}, aluResultCircle: ${aluResultCircle?.id}`);
-          // Fallback to default value
-          resolvedData = 'NO_MEMORY_OPERATION';
-        }
-      }
-      
-      // Special case: MuxReadMem - Write-back value selection
-      if (operation.targetComponent === 'MuxReadMem' && 
-          operation.sourceCircleIds.includes('D_DataMem_read') && 
-          operation.sourceCircleIds.includes('C_MemToReg') && 
-          operation.sourceCircleIds.includes('D_ALU_Result_Mux')) {
-        
-        console.log('🎯 IMPLEMENTING MUXREADMEM MULTIPLEXER LOGIC');
-        
-        // Find the control signal and data values
-        const memToRegCircle = sourceCircles.find(c => c.id === 'C_MemToReg');
-        const aluResultCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mux');
-        const memDataCircle = sourceCircles.find(c => c.id === 'D_DataMem_read');
-        
-        if (memToRegCircle && aluResultCircle && memDataCircle) {
-          const memToRegValue = memToRegCircle.dataValue.toString();
-          
-          console.log(`🔧 C_MemToReg = ${memToRegValue} (control signal)`);
-          console.log(`🔧 D_ALU_Result_Mux = ${aluResultCircle.dataValue} (from ALU)`);
-          console.log(`🔧 D_DataMem_read = ${memDataCircle.dataValue} (from Memory)`);
-          
-          // Get the instruction format to determine the logic
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          
-          // Implement multiplexer logic based on C_MemToReg control signal
-          if (memToRegValue === '0') {
-            // Select the result from the ALU
-            // Applies to: R-Format, I-Format, MOVZ, MOVK
-            resolvedData = aluResultCircle.dataValue.toString();
-            console.log(`✅ MemToReg=0: Selected ALU result = ${resolvedData} (R-Format/I-Format/MOVZ/MOVK)`);
-          } else { // memToRegValue === '1'
-            // Select the result from Data Memory
-            // Applies to: LDUR, LDURB, LDURH, LDURSW
-            // If D_DataMem_read was not created (e.g., in a STUR), its value would be null.
-            // The control signals ensure this path is only taken when a read actually happened.
-            resolvedData = memDataCircle.dataValue.toString();
-            console.log(`✅ MemToReg=1: Selected Memory data = ${resolvedData} (LDUR/LDURB/LDURH/LDURSW)`);
-          }
-        } else {
-          console.error('🔴 MUXREADMEM MERGE: Missing required circles');
-          console.error(`memToRegCircle: ${memToRegCircle?.id}, aluResultCircle: ${aluResultCircle?.id}, memDataCircle: ${memDataCircle?.id}`);
-          // Fallback to ALU result if memory control signals are missing
-          const fallbackAluCircle = sourceCircles.find(c => c.id === 'D_ALU_Result_Mux');
-          if (fallbackAluCircle) {
-            resolvedData = fallbackAluCircle.dataValue.toString();
-            console.log(`🔧 Fallback: Using ALU result = ${resolvedData}`);
-          } else {
-            resolvedData = 'UNKNOWN_WRITEBACK_VALUE';
-          }
-        }
-      }
-      
-      // Special case: RegFile Write Commit Operation
-      if (operation.targetComponent === 'RegFile' && 
-          operation.sourceCircleIds.includes('D_Write_Addr_Idx') && 
-          operation.sourceCircleIds.includes('C_RegWrite') && 
-          operation.sourceCircleIds.includes('D_RegFile_Write')) {
-        
-        console.log('🎯 IMPLEMENTING REGFILE WRITE COMMIT OPERATION');
-        
-        // Find the required circles for register file write operation
-        const writeAddrCircle = sourceCircles.find(c => c.id === 'D_Write_Addr_Idx');
-        const regWriteCircle = sourceCircles.find(c => c.id === 'C_RegWrite');
-        const regFileWriteCircle = sourceCircles.find(c => c.id === 'D_RegFile_Write');
-        
-        if (writeAddrCircle && regWriteCircle && regFileWriteCircle) {
-          const regWriteValue = regWriteCircle.dataValue.toString();
-          const writeAddress = writeAddrCircle.dataValue.toString();
-          const writeData = regFileWriteCircle.dataValue.toString();
-          
-          console.log(`🔧 RegFile Write Commit Operation:`);
-          console.log(`   - C_RegWrite: ${regWriteValue} (control signal)`);
-          console.log(`   - D_Write_Addr_Idx: ${writeAddress} (register address)`);
-          console.log(`   - D_RegFile_Write: ${writeData} (data to write)`);
-          
-          // Get instruction format for context
-          const instructionFormat = this.machineCodeBreakdown?.format;
-          const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-          console.log(`🔧 Instruction format: ${instructionFormat}`);
-          console.log(`🔧 Instruction name: ${instructionName}`);
-          
-          // Implement register write logic based on C_RegWrite control signal
-          if (regWriteValue === '1') {
-            // Parse write address from binary with proper handling
-            let writeAddressInt: number;
-            if (/^[01]+$/.test(writeAddress)) {
-              writeAddressInt = parseInt(writeAddress, 2); // Convert binary string to integer
-            } else {
-              writeAddressInt = parseInt(writeAddress, 10);
-            }
-            
-            // This is an ACTION that updates the Register File's state
-            resolvedData = `WRITE_TO_REG[X${writeAddressInt}]=${writeData}`;
-            console.log(`✅ RegWrite=1: Writing data ${writeData} to register ${writeAddress}`);
-            console.log(`✅ Register Write Operation: ${resolvedData}`);
-            
-            // This creates a temporary visual indicator that represents the write action
-            // The actual register file update would be handled by the CPU state
-          } else {
-            // RegWrite = 0, no register write operation
-            // This applies to: STUR, B, CBZ, CMP, NOP, BR
-            resolvedData = 'NOT_WRITE_ANYTHING';
-            console.log(`✅ RegWrite=0: No register write operation for ${instructionName || instructionFormat}-format instruction`);
-          }
-        } else {
-          console.error('🔴 REGFILE WRITE COMMIT: Missing required circles');
-          console.error(`writeAddrCircle: ${writeAddrCircle?.id}, regWriteCircle: ${regWriteCircle?.id}, regFileWriteCircle: ${regFileWriteCircle?.id}`);
-          // Fallback to default value
-          resolvedData = 'NO_REGISTER_WRITE';
-        }
-      }
-      
-      // Resolve actual data value if using CPU state
+      resolvedData = this.mergeCalculator.calculateMergeDataValue(
+        operation,
+        sourceCircles
+      );
     }
-      const mergedCircle = this.circleManager.createCircle(
+      // Resolve actual data value if using CPU state
+    
+    const mergedCircle = this.circleManager.createCircle(
       resolvedData,
       mergedDataType as any, // Default type, could be determined from operation
       targetPosition,
@@ -2252,249 +807,14 @@ export class InstructionAnimationController {
     
     if (operation.results && operation.results.length > 0) {
       const result = operation.results[0]; // Take first result for transform
-      newValue = result.dataValue;
       newDataType = result.dataType as any;
       newId = result.id;
+      newValue = this.transformCalculator.calculateTransformDataValue(
+        operation,
+        sourceCircle
+      );
       
-      // Resolve actual data value if using CPU state and placeholder
-      if (this.cpuState && typeof result.dataValue === 'string') {
-        const placeholder = result.dataValue.toUpperCase();
-        
-        switch (placeholder) {
-          case 'INSTRUCTION_BINARY':
-            // Machine code in binary format
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              newValue = this.machineCodeBreakdown.machineCode32Bit;
-              console.log(`🎯 Transform resolved INSTRUCTION_BINARY to: ${newValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_31_21':
-            // Opcode field [31-21] - 11 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const opcodeBits = binaryString.substring(0, 11); // Extract bits 31-21
-              newValue = opcodeBits;
-              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_31_21 to: ${newValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_20_16':
-            // Rm field [20-16] - 5 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rmBits = binaryString.substring(11, 16); // Extract bits 20-16
-              newValue = rmBits;
-              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_20_16 to: ${newValue}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_9_5':
-            // Rn field [9-5] - 5 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rnBits = binaryString.substring(22, 27); // Extract bits 9-5 (positions 22-26)
-              newValue = rnBits;
-              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_9_5 to: ${newValue} (from machine code: ${binaryString})`);
-              console.log(`🎯 Transform extracted from positions 22-26: ${binaryString.substring(22, 27)}`);
-            }
-            break;
-            
-          case 'INSTRUCTION_FIELD_4_0':
-            // Rd field [4-0] - 5 bits in pure binary
-            // For CB-Format: either register (CBZ/CBNZ) or condition code (B.COND)
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              const binaryString = this.machineCodeBreakdown.machineCode32Bit;
-              const rdBits = binaryString.substring(27, 32); // Extract bits 4-0
-              
-              // Check if this is a CB-Format instruction
-              if (this.machineCodeBreakdown?.format === 'CB') {
-                const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-                
-                if (instructionName && instructionName.startsWith('B.')) {
-                  // B.COND instruction - Rt field contains condition code
-                  const conditionValue = parseInt(rdBits, 2);
-                  const conditionMap: { [key: number]: string } = {
-                    0: 'EQ',   // B.EQ: 00000
-                    1: 'NE',   // B.NE: 00001
-                    2: 'HS',   // B.HS: 00010 (also CS)
-                    3: 'LO',   // B.LO: 00011 (also CC)
-                    4: 'MI',   // B.MI: 00100
-                    5: 'PL',   // B.PL: 00101
-                    6: 'VS',   // B.VS: 00110
-                    7: 'VC',   // B.VC: 00111
-                    8: 'HI',   // B.HI: 01000
-                    9: 'LS',   // B.LS: 01001
-                    10: 'GE',  // B.GE: 01010
-                    11: 'LT',  // B.LT: 01011
-                    12: 'GT',  // B.GT: 01100
-                    13: 'LE',  // B.LE: 01101
-                    14: 'AL'   // B.AL: 01110
-                  };
-                  
-                  const conditionName = conditionMap[conditionValue] || 'UNKNOWN';
-                  newValue = rdBits; // Keep binary for internal use
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format B.${conditionName}) to: ${newValue} (condition code: ${conditionValue})`);
-                } else if (instructionName && (instructionName === 'CBZ' || instructionName === 'CBNZ')) {
-                  // CBZ/CBNZ instruction - Rt field contains register number
-                  const registerNumber = parseInt(rdBits, 2);
-                  newValue = rdBits; // Keep binary for internal use
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format ${instructionName}) to: ${newValue} (register X${registerNumber})`);
-                } else {
-                  // Default CB-Format handling
-                  newValue = rdBits;
-                  console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 (CB-Format) to: ${newValue}`);
-                }
-              } else {
-                // Non-CB-Format instruction - standard register field
-                newValue = rdBits;
-                console.log(`🎯 Resolved INSTRUCTION_FIELD_4_0 to: ${newValue}`);
-              }
-            }
-            break;
-          case 'INSTRUCTION_FIELD_31_0':
-            // Full instruction - all 32 bits in pure binary
-            if (this.machineCodeBreakdown?.machineCode32Bit) {
-              newValue = this.machineCodeBreakdown.machineCode32Bit;
-              console.log(`🎯 Transform resolved INSTRUCTION_FIELD_31_0 to: ${newValue}`);
-            }
-            break;
-            
-          case 'REGISTER_VALUE_FROM_INDEX':
-            // Convert register index to register value from CPU state
-            if (this.cpuState && sourceCircle) {
-              // Parse the register index from the source circle's binary data
-              const registerIndex = parseInt(sourceCircle.dataValue as string, 2);
-              if (!isNaN(registerIndex) && registerIndex >= 0 && registerIndex <= 31) {
-                // XZR (register 31) always returns 0, others read from CPU state
-                const registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
-                
-                // Convert to 32-bit binary representation with proper two's complement handling
-                let binaryValue: string;
-                if (registerValue < 0) {
-                  // Negative value - use 32-bit two's complement
-                  const unsignedValue = (registerValue >>> 0); // Convert to unsigned 32-bit
-                  binaryValue = unsignedValue.toString(2).padStart(32, '0');
-                } else {
-                  // Positive value - standard binary representation
-                  binaryValue = registerValue.toString(2).padStart(32, '0');
-                }
-                
-                newValue = binaryValue;
-                console.log(`🎯 Transform resolved REGISTER_VALUE_FROM_INDEX: R${registerIndex} = ${newValue} (binary index: ${sourceCircle.dataValue})`);
-              } else {
-                console.error(`🔴 Invalid register index for REGISTER_VALUE_FROM_INDEX: ${sourceCircle.dataValue}`);
-                newValue = '0x00000000';
-              }
-            }
-            break;
-          case 'D_SHIFT_RESULT':
-            console.log('🎯 IMPLEMENTING SHIFT LEFT 2 OPERATION');
-        
-            // Get the immediate value to shift
-            let immediateValue: number;
-            const sourceValue = sourceCircle.dataValue.toString();
-            
-            console.log(`🔧 Source immediate value: ${sourceValue}`);
-            
-            // Parse the immediate value - handle different formats
-            if (sourceValue.startsWith('0x')) {
-              immediateValue = parseInt(sourceValue, 16);
-              console.log(`🔧 Parsed as hex: ${immediateValue}`);
-            } else if (sourceValue.startsWith('0b')) {
-              immediateValue = parseInt(sourceValue.slice(2), 2);
-              console.log(`🔧 Parsed as prefixed binary: ${immediateValue}`);
-            } else if (sourceValue.match(/^[01]+$/) && sourceValue.length > 8) {
-              // Long binary string (likely from SignExtend) - parse as binary
-              immediateValue = parseInt(sourceValue, 2);
-              console.log(`🔧 Parsed as binary string (${sourceValue.length} bits): ${immediateValue}`);
-              
-              // Handle two's complement for negative values if needed
-              if (sourceValue[0] === '1' && sourceValue.length <= 64) {
-                const bitLength = sourceValue.length;
-                immediateValue = immediateValue - Math.pow(2, bitLength);
-                console.log(`🔧 Applied two's complement: ${immediateValue}`);
-              }
-            } else if (/^-?\d+$/.test(sourceValue)) {
-              immediateValue = parseInt(sourceValue, 10);
-              console.log(`🔧 Parsed as decimal: ${immediateValue}`);
-            } else {
-              // Fallback: try parsing as binary
-              immediateValue = parseInt(sourceValue, 2);
-              console.log(`🔧 Fallback binary parse: ${immediateValue}`);
-            }
-            
-            // Get instruction format for context
-            const instructionFormat = this.machineCodeBreakdown?.format;
-            console.log(`🔧 Instruction format: ${instructionFormat}`);
-            
-            // Perform left shift by 2 (multiply by 4 for word-to-byte address conversion)
-            const shiftedValue = immediateValue << 2;
-            
-            console.log(`🔧 Shift Left 2 Operation:`);
-            console.log(`   - Original immediate: ${immediateValue} (0x${immediateValue.toString(16)})`);
-            console.log(`   - Shifted left by 2: ${shiftedValue} (0x${shiftedValue.toString(16)})`);
-            console.log(`   - This converts word offset to byte offset for ${instructionFormat}-format instruction`);
-            
-            // Update the new value with the shifted result
-            newValue = shiftedValue.toString();
-            console.log(`✅ ShiftLeft2 Result: ${newValue}`);
-            break;
-          case 'D_DATAMEM_ADDR_READY':
-            // Data memory address ready - use the source circle's value directly
-            newValue = sourceCircle.dataValue.toString();
-            console.log(`🎯 Transform resolved D_DataMem_Addr_Ready to: ${newValue}`);
-            break;
-            
-          case 'PC_PLUS_4':
-            console.log('🎯 IMPLEMENTING PC+4 CALCULATION');
-            
-            // Get the PC value from the source circle (D_PC_To_Plus_4)
-            let pcValue: number;
-            const pcSourceValue = sourceCircle.dataValue.toString();
-            
-            console.log(`🔧 Source PC value: ${pcSourceValue}`);
-            
-            // Parse the PC value - handle different formats
-            if (pcSourceValue.startsWith('0x')) {
-              pcValue = parseInt(pcSourceValue, 16);
-            } else if (pcSourceValue.startsWith('0b')) {
-              pcValue = parseInt(pcSourceValue.slice(2), 2);
-            } else if (/^\d+$/.test(pcSourceValue)) {
-              pcValue = parseInt(pcSourceValue, 10);
-            } else {
-              // Fallback to parsing as decimal
-              pcValue = parseInt(pcSourceValue, 10);
-            }
-            
-            // Get instruction format and mnemonic for context
-            const pcPlusInstructionFormat = this.machineCodeBreakdown?.format;
-            const pcPlusInstructionMnemonic = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
-            
-            console.log(`🔧 Instruction format: ${pcPlusInstructionFormat}`);
-            console.log(`🔧 Instruction mnemonic: ${pcPlusInstructionMnemonic}`);
-            
-            // Perform PC+4 calculation (add 4 bytes to get next instruction address)
-            const pcPlus4Value = pcValue + 4;
-            
-            console.log(`🔧 PC+4 Calculation:`);
-            console.log(`   - Current PC: ${pcValue} (0x${pcValue.toString(16).toUpperCase().padStart(8, '0')})`);
-            console.log(`   - PC + 4: ${pcPlus4Value} (0x${pcPlus4Value.toString(16).toUpperCase().padStart(8, '0')})`);
-            console.log(`   - Next sequential instruction address for ${pcPlusInstructionFormat}-format ${pcPlusInstructionMnemonic} instruction`);
-            
-            // Format result as hex address
-            newValue = `0x${pcPlus4Value.toString(16).toUpperCase().padStart(8, '0')}`;
-            console.log(`✅ PC+4 Calculation Result: ${newValue}`);
-            break;
-                
-            default:
-                // Keep the resolved value from result.dataValue
-                break;
-            }
-          }
     }
-      console.log(`Transforming circle ${sourceCircle.id} from ${sourceCircle.dataValue} to ${newValue} (type: ${newDataType})`);
-
     // For transform operations with results, create a NEW circle with the result name
     if (operation.results && operation.results.length > 0) {
       const result = operation.results[0];
@@ -2873,7 +1193,7 @@ export class InstructionAnimationController {
   /**
    * Clear all active circles (called when starting new instruction)
    */
-  private clearAllCircles(): void {
+  private async clearAllCircles(): Promise<void> {
     // Create fade-out animations for all active circles before clearing
     const fadeOutAnimations: CircleAnimation[] = Array.from(this.activeCircles.values())
       .filter(circle => circle.isActive)
@@ -2889,14 +1209,15 @@ export class InstructionAnimationController {
       }));
 
     if (fadeOutAnimations.length > 0) {
-      // Execute fade-out animations quickly and clear
-      this.animationSequencer.executeParallel(fadeOutAnimations).then(() => {
-        this.activeCircles.forEach((circle, id) => {
-          this.callbacks.onCircleDestroy(id);
-        });
-        this.activeCircles.clear();
-        this.circleManager.clearAll();
+      // Execute fade-out animations and wait for completion
+      await this.animationSequencer.executeParallel(fadeOutAnimations);
+      
+      // Clear after animations complete
+      this.activeCircles.forEach((circle, id) => {
+        this.callbacks.onCircleDestroy(id);
       });
+      this.activeCircles.clear();
+      this.circleManager.clearAll();
     } else {
       // No animations needed, just clear immediately
       this.activeCircles.forEach((circle, id) => {
@@ -3188,6 +1509,27 @@ export class InstructionAnimationController {
   }
 
   /**
+   * Stop all animations and reset controller state
+   */
+  stopAllAnimations(): void {
+    console.log('🛑 InstructionAnimationController: Stopping all animations...');
+    
+    // Stop the animation sequencer
+    this.animationSequencer.stop();
+    
+    // Reset internal state
+    this.isPlaying = false;
+    this.currentInstruction = null;
+    this.currentStep = 0;
+    
+    // Clear active circles
+    this.activeCircles.clear();
+    this.circleManager.clearAll();
+    
+    console.log('🛑 InstructionAnimationController: All animations stopped and state reset');
+  }
+
+  /**
    * Pause current animation
    */
   pause(): void {
@@ -3433,8 +1775,14 @@ export class InstructionAnimationController {
       await this.initializePhaseAnimation();
     }
 
+    // Save state before executing stage
+    this.saveStageState(phaseIndex, stage.stageName);
+
     // Execute the specific stage
     await this.executeStageFlow(stage, phaseIndex);
+
+    // Save final state after executing stage
+    this.saveFinalStageState(phaseIndex);
   }
 
   /**
@@ -3442,7 +1790,7 @@ export class InstructionAnimationController {
    */
   private async initializePhaseAnimation(): Promise<void> {
     // Clear any existing circles
-    this.clearAllCircles();
+    await this.clearAllCircles();
 
     // Initialize with first circle (PC value) at PC component with real CPU data
     const pcPosition = this.getComponentPosition('PC');
@@ -3493,7 +1841,146 @@ export class InstructionAnimationController {
     this.currentInstruction = null;
     this.currentStep = 0;
     this.stageDataFlows = [];
+    this.stageHistory.clear();
     console.log('Animation controller state reset');
+  }
+
+  /**
+   * Save the current state before executing a stage
+   */
+  private saveStageState(stageIndex: number, stageName: string): void {
+    const initialCircles = new Map<string, DataCircle>();
+    
+    // Deep copy current active circles as initial state
+    this.activeCircles.forEach((circle, id) => {
+      initialCircles.set(id, {
+        ...circle,
+        position: { ...circle.position }
+      });
+    });
+
+    // Store initial state
+    this.stageHistory.set(stageIndex, {
+      initialCircles,
+      finalCircles: new Map(), // Will be filled after stage execution
+      stageName
+    });
+
+    console.log(`💾 Saved initial state for stage ${stageIndex}: ${stageName} with ${initialCircles.size} circles`);
+  }
+
+  /**
+   * Save the final state after executing a stage
+   */
+  private saveFinalStageState(stageIndex: number): void {
+    const stageState = this.stageHistory.get(stageIndex);
+    if (stageState) {
+      const finalCircles = new Map<string, DataCircle>();
+      
+      // Deep copy current active circles as final state
+      this.activeCircles.forEach((circle, id) => {
+        finalCircles.set(id, {
+          ...circle,
+          position: { ...circle.position }
+        });
+      });
+
+      stageState.finalCircles = finalCircles;
+      console.log(`💾 Saved final state for stage ${stageIndex}: ${stageState.stageName} with ${finalCircles.size} circles`);
+    }
+  }
+
+  /**
+   * Public method to replay a specific stage
+   * Restores initial circles and re-executes the stage
+   */
+  async replayStage(stageIndex: number, workflow: StageDataFlow[]): Promise<void> {
+    if (stageIndex < 0 || stageIndex >= workflow.length) {
+      throw new Error(`Invalid stage index: ${stageIndex}. Must be between 0 and ${workflow.length - 1}`);
+    }
+
+    const stageState = this.stageHistory.get(stageIndex);
+    if (!stageState) {
+      console.error(`No saved state found for stage ${stageIndex}. Cannot replay.`);
+      return;
+    }
+
+    console.log(`🔄 Replaying stage ${stageIndex}: ${stageState.stageName}`);
+    console.log(`🔄 Before clearing: ${this.activeCircles.size} active circles`);
+
+    // Clear current circles and wait for completion
+    await this.clearAllCircles();
+    console.log(`🔄 After clearing: ${this.activeCircles.size} active circles`);
+
+    // Restore initial circles with fade-in animation
+    const fadeInAnimations: CircleAnimation[] = [];
+
+    stageState.initialCircles.forEach((circle, id) => {
+      // Create a new circle with the saved state
+      const restoredCircle = this.circleManager.createCircle(
+        circle.dataValue,
+        circle.dataType,
+        circle.position,
+        circle.stage,
+        circle.parentId
+      );
+      restoredCircle.id = circle.id;
+      restoredCircle.isActive = true;
+      restoredCircle.opacity = 0; // Start invisible for fade-in
+
+      this.activeCircles.set(restoredCircle.id, restoredCircle);
+      this.callbacks.onCircleCreate(restoredCircle);
+
+      // Create fade-in animation
+      fadeInAnimations.push({
+        circleId: restoredCircle.id,
+        operation: 'fade-in',
+        duration: 300,
+        startPosition: restoredCircle.position,
+        onUpdate: (position: Point, opacity: number) => {
+          restoredCircle.opacity = opacity;
+          this.callbacks.onCircleUpdate(restoredCircle);
+        }
+      });
+    });
+
+    // Execute fade-in animations
+    if (fadeInAnimations.length > 0) {
+      await this.animationSequencer.executeParallel(fadeInAnimations);
+    }
+
+    console.log(`✅ Restored ${stageState.initialCircles.size} initial circles for stage ${stageIndex}. Active circles: ${this.activeCircles.size}`);
+
+    // Re-execute the stage
+    const stage = workflow[stageIndex];
+    await this.executeStageFlow(stage, stageIndex);
+
+    console.log(`🎬 Replay completed for stage ${stageIndex}: ${stageState.stageName}. Final active circles: ${this.activeCircles.size}`);
+  }
+
+  /**
+   * Check if a stage can be replayed (has saved state)
+   */
+  canReplayStage(stageIndex: number): boolean {
+    return this.stageHistory.has(stageIndex);
+  }
+
+  /**
+   * Get the size of stage history for debugging
+   */
+  getStageHistorySize(): number {
+    return this.stageHistory.size;
+  }
+
+  /**
+   * Get stage history debug info
+   */
+  getStageHistoryDebug(): string[] {
+    const info: string[] = [];
+    this.stageHistory.forEach((state, index) => {
+      info.push(`Stage ${index}: ${state.stageName} (${state.initialCircles.size} initial, ${state.finalCircles.size} final)`);
+    });
+    return info;
   }
 }
 

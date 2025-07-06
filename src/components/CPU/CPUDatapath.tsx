@@ -57,6 +57,11 @@ const CPUDatapath: React.FC = () => {
   const [currentPhase, setCurrentPhase] = useState(0);
   const [phaseInProgress, setPhaseInProgress] = useState(false);
   
+  // Play/Pause state
+  const [isPaused, setIsPaused] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [animationStarted, setAnimationStarted] = useState(false);
+  
   // Debug state for wire path visualization
   const [showWireDebug, setShowWireDebug] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState('PC->InsMem');
@@ -73,9 +78,173 @@ const CPUDatapath: React.FC = () => {
       return;
     }
 
+    console.log(`🎬 Starting executePhase ${phaseIndex}, current history size: ${instructionAnimationController.getStageHistorySize()}`);
+
     setPhaseInProgress(true);
     setIsAnimating(true);
     setCurrentPhase(phaseIndex);
+
+    // Create a promise that resolves when animations are truly complete
+    const animationCompletePromise = new Promise<void>((resolve, reject) => {
+      let resolved = false;
+      let timeoutId: NodeJS.Timeout;
+      
+      const resolveOnce = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeoutId);
+          resolve();
+        }
+      };
+      
+      const handleStageComplete = (stage: any, stageIndex: number) => {
+        console.log(`✅ Stage animation completed: ${stage.name}`);
+        // Original stage complete logic
+        setHighlightedComponents([]);
+        
+        // For final stage, don't resolve immediately - wait for onAnimationComplete
+        if (phaseIndex === WORKFLOW.length - 1) {
+          console.log('🎯 Final stage completed, waiting for onAnimationComplete...');
+          // Don't resolve here for final stage, let onAnimationComplete handle it
+        } else {
+          // For non-final stages, resolve with a small delay
+          setTimeout(resolveOnce, 200);
+        }
+      };
+
+      // Add a timeout to prevent hanging if animation never completes
+      timeoutId = setTimeout(() => {
+        console.warn('⚠️ Animation completion timeout - forcing completion');
+        
+        // If this is a final stage timeout, we need to reset states too
+        if (phaseIndex === WORKFLOW.length - 1) {
+          console.warn('⚠️ Final stage timeout - forcing state reset');
+          setPhaseInProgress(false);
+          setIsAnimating(false);
+          setShowStageAnimation(false);
+          stopAnimation();
+          setAnimationPath([]);
+          setHighlightedComponents([]);
+          
+          if (isPlaying && !isPaused) {
+            console.log('Timeout: Auto-play final stage completed - resetting play state');
+            setIsPlaying(false);
+            setAnimationStarted(false);
+          }
+        }
+        
+        resolveOnce();
+      }, 10000); // 10 second timeout
+
+      // Update callbacks to include our completion handler
+      instructionAnimationController.setCallbacks({
+        onStageStart: (stage: any, stageIndex: number, wirePath?: any[]) => {
+          console.log(`Starting stage ${stageIndex}: ${stage.name}`);
+          setAnimationStage(stageIndex, currentAnimationStages.length);
+          
+          // Set current stage duration
+          setCurrentStageDuration(stage.duration || 1000);
+          
+          // Set animation path for this stage
+          if (wirePath && wirePath.length > 0) {
+            console.log('Setting animation path:', wirePath);
+            setAnimationPath(wirePath);
+          } else {
+            console.log('No wire path provided for stage:', stage.name);
+            setAnimationPath([]);
+          }
+          
+          // Set component highlights for this stage based on activatedComponents
+          if (stage.activatedComponents && stage.activatedComponents.length > 0) {
+            const highlights = stage.activatedComponents.map((componentId: string) => ({
+              componentId,
+              highlightType: 'processing' as const,
+              duration: 1000
+            }));
+            setHighlightedComponents(highlights);
+          }
+        },
+        onStageComplete: handleStageComplete,
+        onAnimationComplete: () => {
+          console.log('Animation complete');
+          
+          // Always handle basic animation state cleanup
+          setIsAnimating(false);
+          setShowStageAnimation(false);
+          stopAnimation();
+          // Clear animation state
+          setAnimationPath([]);
+          setHighlightedComponents([]);
+          
+          // For the final stage, handle all state resets here
+          if (phaseIndex === WORKFLOW.length - 1) {
+            console.log('🎯 Final stage animation fully complete, handling all state resets...');
+            setPhaseInProgress(false);
+            
+            // Handle play state reset for final stage
+            if (isPlaying && !isPaused) {
+              console.log('Auto-play final stage completed - resetting play state');
+              setIsPlaying(false);
+              setAnimationStarted(false);
+            }
+            
+            setTimeout(resolveOnce, 100); // Small delay to ensure all animations are done
+          }
+          
+          // Execute the actual instruction step after animation
+          step();
+        },
+        onComponentHighlight: (componentIds: string[]) => {
+          setActiveComponents(new Set(componentIds));
+          // Also update store highlights
+          const highlights = componentIds.map(componentId => ({
+            componentId,
+            highlightType: 'active' as const,
+            duration: 1000
+          }));
+          setHighlightedComponents(highlights);
+        },
+        onOperationHighlight: (highlights: ComponentHighlight[]) => {
+          console.log('Highlighting components for operation:', highlights);
+          setHighlightedComponents(highlights);
+          
+          // Extract wire paths from highlights
+          const wirePaths: string[] = [];
+          highlights.forEach(highlight => {
+            if (highlight.wirePaths) {
+              wirePaths.push(...highlight.wirePaths);
+            }
+          });
+          
+          if (wirePaths.length > 0) {
+            console.log('Highlighting wire paths:', wirePaths);
+            setHighlightedWirePaths(wirePaths);
+          }
+        },
+        onClearHighlights: () => {
+          console.log('Clearing all highlights');
+          setHighlightedComponents([]);
+          setHighlightedWirePaths([]);
+        },
+        // Multi-circle animation callbacks
+        onCircleCreate: (circle: DataCircle) => {
+          console.log('Creating circle:', circle.id, 'with data:', circle.dataValue);
+          setActiveCircles(prev => new Map(prev.set(circle.id, circle)));
+        },
+        onCircleUpdate: (circle: DataCircle) => {
+          console.log('Updating circle:', circle.id, 'with data:', circle.dataValue);
+          setActiveCircles(prev => new Map(prev.set(circle.id, circle)));
+        },
+        onCircleDestroy: (circleId: string) => {
+          console.log('Destroying circle:', circleId);
+          setActiveCircles(prev => {
+            const newCircles = new Map(prev);
+            newCircles.delete(circleId);
+            return newCircles;
+          });
+        }
+      });
+    });
 
     try {
       const stage = WORKFLOW[phaseIndex];
@@ -96,15 +265,17 @@ const CPUDatapath: React.FC = () => {
       // Execute the specific phase using the public method
       await instructionAnimationController.executePhase(phaseIndex, WORKFLOW);
       
-      console.log(`Completed phase ${phaseIndex + 1}: ${stage.stageName}`);
+      // Wait for all animations to complete before proceeding
+      console.log(`⏳ Waiting for animations to complete for phase ${phaseIndex + 1}...`);
+      await animationCompletePromise;
+      console.log(`🎯 All animations completed for phase ${phaseIndex + 1}: ${stage.stageName}`);
       
       // Check if this was the last stage (PC update)
       if (phaseIndex === WORKFLOW.length - 1) {
-        console.log('🎯 Last stage completed! Advancing to next instruction...');
+        console.log('🎯 Last stage completed! onAnimationComplete will handle step() call...');
         // Reset to first phase for next instruction
         setCurrentPhase(0);
-        // Trigger the step function to advance to next instruction
-        step();
+        // Don't call step() here - let onAnimationComplete handle it to ensure proper timing
       } else {
         // Increment to next phase after successful completion
         const nextPhase = phaseIndex + 1;
@@ -113,6 +284,90 @@ const CPUDatapath: React.FC = () => {
       
     } catch (error) {
       console.error('Phase execution error:', error);
+      // Note: Promise rejection will be handled by the animationCompletePromise timeout
+    } finally {
+      // For final stage, let onAnimationComplete handle ALL state resets
+      if (phaseIndex === WORKFLOW.length - 1) {
+        console.log('🎯 Final stage - deferring ALL state resets to onAnimationComplete');
+        // Don't reset any states here for final stage - let onAnimationComplete handle everything
+      } else {
+        // For non-final stages, reset states normally
+        setPhaseInProgress(false);
+        setIsAnimating(false);
+        setShowStageAnimation(false);
+        stopAnimation();
+        
+        // If we were playing automatically, reset play state after completion
+        if (isPlaying && !isPaused) {
+          console.log('Auto-play phase completed - resetting play state');
+          setIsPlaying(false);
+          setAnimationStarted(false);
+        }
+      }
+    }
+  };
+
+  // Simple next phase function
+  const goToNextPhase = () => {
+    // Prevent multiple clicks and ensure we're not already processing
+    if (phaseInProgress || isAnimating || isPlaying) {
+      console.log('Cannot proceed to next phase - animation or phase already in progress');
+      return;
+    }
+    executePhase(currentPhase);
+  };
+
+  // Replay current phase function
+  const replayCurrentPhase = async () => {
+    if (phaseInProgress || isAnimating || isPlaying || !cpu.currentInstruction) {
+      console.log('Cannot replay - phase/animation in progress or no instruction available');
+      return;
+    }
+
+    // We want to replay the previous phase that was just completed
+    const phaseToReplay = currentPhase - 1;
+    
+    if (phaseToReplay < 0) {
+      console.log('Cannot replay - no previous phase available (currentPhase:', currentPhase, ')');
+      return;
+    }
+
+    // Check if the previous phase can be replayed
+    if (!instructionAnimationController.canReplayStage(phaseToReplay)) {
+      console.log(`Previous phase ${phaseToReplay} cannot be replayed - no saved state`);
+      return;
+    }
+
+    setPhaseInProgress(true);
+    setIsAnimating(true);
+
+    try {
+      console.log(`🔄 Replaying previous phase ${phaseToReplay} (display: phase ${phaseToReplay + 1})`);
+
+      // Set up animation state
+      setShowStageAnimation(true);
+      startAnimation(`Replay Phase ${phaseToReplay + 1}`);
+      
+      // Set current CPU state for data integration
+      instructionAnimationController.setCPUState(cpu);
+      
+      // Set machine code breakdown for proper field extraction
+      if (currentMachineCode) {
+        instructionAnimationController.setMachineCodeBreakdown(currentMachineCode);
+      }
+      
+      // Replay the previous phase
+      await instructionAnimationController.replayStage(phaseToReplay, WORKFLOW);
+      
+      console.log(`✅ Replay completed for previous phase ${phaseToReplay} (display: phase ${phaseToReplay + 1})`);
+      
+      // Ensure UI state is synchronized with animation controller after replay
+      const controllerCircles = instructionAnimationController.getActiveCircles();
+      setActiveCircles(new Map(controllerCircles));
+      console.log(`🔄 Synchronized UI state: ${controllerCircles.size} active circles after replay`);
+      
+    } catch (error) {
+      console.error('Phase replay error:', error);
     } finally {
       setPhaseInProgress(false);
       setIsAnimating(false);
@@ -121,19 +376,21 @@ const CPUDatapath: React.FC = () => {
     }
   };
 
-  // Simple next phase function
-  const goToNextPhase = () => {
-    executePhase(currentPhase);
-  };
-
   // Reset phase animation state
   const resetPhaseState = () => {
+    console.log(`🔄 resetPhaseState called - clearing history of size: ${instructionAnimationController.getStageHistorySize()}`);
     setCurrentPhase(0);
     setPhaseInProgress(false);
     setIsAnimating(false);
     setShowStageAnimation(false);
     setActiveCircles(new Map());
     setHighlightedWirePaths([]);
+    
+    // Reset play/pause states and animation started flag
+    setIsPlaying(false);
+    setIsPaused(false);
+    setAnimationStarted(false); // Reset animation started flag when resetting phase state
+    
     stopAnimation();
     
     // Clear animation controller state using public method
@@ -142,10 +399,28 @@ const CPUDatapath: React.FC = () => {
     console.log('Phase animation state reset');
   };
 
-  // Reset phase state when CPU state changes (step, reset, jumpToStep, loadProgram)
+  // Track the last instruction to detect actual instruction changes
+  const [lastInstructionAssembly, setLastInstructionAssembly] = useState<string | null>(null);
+
+  // Reset phase state only when the actual instruction assembly changes
   useEffect(() => {
-    resetPhaseState();
-  }, [cpu.currentInstructionIndex, cpu.pc]);
+    const currentAssembly = cpu.currentInstruction?.assembly || null;
+    if (currentAssembly !== lastInstructionAssembly) {
+      console.log(`Instruction assembly changed from "${lastInstructionAssembly}" to "${currentAssembly}" - resetting phase state`);
+      resetPhaseState();
+      setLastInstructionAssembly(currentAssembly);
+    }
+  }, [cpu.currentInstruction?.assembly]);
+
+  // Reset phase state when program is reset/loaded (PC changes to start)
+  useEffect(() => {
+    // Only reset on significant PC changes (like program reset), not normal execution
+    if (cpu.pc === 0x00400000 || cpu.pc < 0x00400000) {
+      console.log('Program reset detected - resetting phase state');
+      resetPhaseState();
+      setLastInstructionAssembly(null);
+    }
+  }, [cpu.pc]);
 
   // Reset phase state when instruction changes
   useEffect(() => {
@@ -153,6 +428,143 @@ const CPUDatapath: React.FC = () => {
       resetPhaseState();
     }
   }, [cpu.currentInstruction?.assembly]);
+
+  // Play/Pause button logic
+  const handlePlayPause = async () => {
+    console.log('🎮 handlePlayPause called - Current state:', { isPlaying, isPaused, isAnimating, phaseInProgress });
+    
+    // Prevent multiple clicks during state transitions
+    if (phaseInProgress && !isPlaying) {
+      console.log('Phase in progress, cannot change play state');
+      return;
+    }
+
+    if (isPlaying) {
+      // Currently playing, pause the animation
+      console.log('🎬 Pausing animation...');
+      setIsPaused(true);
+      setIsPlaying(false);
+      // Keep animationStarted true during pause so Next Step/Replay remain disabled
+      
+      try {
+        // Pause the animation sequencer
+        await instructionAnimationController.getAnimationSequencer().pause();
+        console.log('🎬 Animation paused successfully');
+      } catch (error) {
+        console.error('Error pausing animation:', error);
+      }
+    } else {
+      // Currently paused or stopped, resume or start playing
+      if (isPaused) {
+        // Resume from pause
+        console.log('▶️ Resuming animation from pause...');
+        setIsPaused(false);
+        setIsPlaying(true);
+        // animationStarted should remain true during resume
+        
+        try {
+          // Resume the animation sequencer
+          await instructionAnimationController.getAnimationSequencer().resume();
+          console.log('▶️ Animation resumed successfully');
+        } catch (error) {
+          console.error('Error resuming animation:', error);
+          // If resume fails, try starting a new animation
+          console.log('🔄 Resume failed, attempting to start new animation...');
+          if (cpu.currentInstruction && !isAnimating && !phaseInProgress) {
+            setAnimationStarted(true);
+            await handleNextStep();
+          }
+        }
+      } else {
+        // Start new animation sequence (first time or after completion)
+        console.log('▶️ Starting new animation sequence...');
+        if (cpu.currentInstruction && !isAnimating && !phaseInProgress) {
+          setIsPlaying(true);
+          setAnimationStarted(true);
+          await handleNextStep();
+        } else {
+          console.log('❌ Cannot start animation - conditions not met:', {
+            hasInstruction: !!cpu.currentInstruction,
+            isAnimating,
+            phaseInProgress
+          });
+        }
+      }
+    }
+  };
+
+  // Reset play/pause state when instruction changes
+  useEffect(() => {
+    const currentAssembly = cpu.currentInstruction?.assembly || null;
+    if (currentAssembly !== lastInstructionAssembly) {
+      console.log(`Instruction changed - resetting play/pause state`);
+      setIsPaused(false);
+      setIsPlaying(false);
+      setAnimationStarted(false);
+    }
+  }, [cpu.currentInstruction?.assembly, lastInstructionAssembly]);
+
+  // Update play/pause state when animation completes
+  useEffect(() => {
+    if (!isAnimating && !phaseInProgress && isPlaying) {
+      console.log('Animation completed - updating play/pause state');
+      setIsPlaying(false);
+      setIsPaused(false);
+      setAnimationStarted(false); // Reset animation started flag when sequence completes
+    }
+  }, [isAnimating, phaseInProgress, isPlaying]);
+
+  // Reset play/pause state when animation gets stuck
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (isPlaying && !isAnimating && !phaseInProgress) {
+      // If playing but no animation is running, reset after a short delay
+      timeoutId = setTimeout(() => {
+        console.log('⚠️ Play state inconsistency detected - resetting');
+        setIsPlaying(false);
+        setIsPaused(false);
+        setAnimationStarted(false); // Reset animation started flag on timeout
+      }, 1000);
+    }
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isPlaying, isAnimating, phaseInProgress]);
+
+  // Enhanced state consistency check
+  useEffect(() => {
+    // If no animation or phase is running, but we're still marked as playing, reset
+    if (!isAnimating && !phaseInProgress && !cpu.currentInstruction && (isPlaying || isPaused)) {
+      console.log('No instruction available - resetting all animation states');
+      setIsPlaying(false);
+      setIsPaused(false);
+      setAnimationStarted(false); // Reset animation started flag when no instruction
+    }
+    
+    // If animation/phase stopped but we're still marked as playing without pause, reset
+    // Add a small delay to avoid interfering with final stage transitions
+    if (!isAnimating && !phaseInProgress && isPlaying && !isPaused) {
+      const timeoutId = setTimeout(() => {
+        // Double-check conditions after delay to ensure we're not in a final stage transition
+        if (!isAnimating && !phaseInProgress && isPlaying && !isPaused) {
+          console.log('Animation/phase stopped but still marked as playing - resetting states (after delay)');
+          setIsPlaying(false);
+          setAnimationStarted(false);
+        }
+      }, 500); // 500ms delay to allow for final stage transitions
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isAnimating, phaseInProgress, isPlaying, isPaused, cpu.currentInstruction]);
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('🎮 Button state changed:', { isPlaying, isPaused, isAnimating, phaseInProgress, animationStarted });
+  }, [isPlaying, isPaused, isAnimating, phaseInProgress, animationStarted]);
 
   useEffect(() => {
     animationController.setSpeed(animationSpeed);
@@ -362,10 +774,11 @@ const CPUDatapath: React.FC = () => {
         setActiveCircles(prev => new Map(prev.set(circle.id, circle)));
       },
       onCircleDestroy: (circleId: string) => {
-        console.log('Destroying circle:', circleId);
+        console.log('🗑️ Destroying circle:', circleId);
         setActiveCircles(prev => {
           const newMap = new Map(prev);
-          newMap.delete(circleId);
+          const wasPresent = newMap.delete(circleId);
+          console.log(`🗑️ Circle ${circleId} deletion: ${wasPresent ? 'success' : 'not found'}, remaining circles: ${newMap.size}`);
           return newMap;
         });
       }
@@ -373,10 +786,14 @@ const CPUDatapath: React.FC = () => {
   }, [currentAnimationStages.length, setAnimationStage, stopAnimation, step, setAnimationPath, setHighlightedComponents]);
   // Handle Next Step button click
   const handleNextStep = async () => {
-    if (isAnimating) {
-      console.log('Animation already in progress, skipping...');
+    if (isAnimating || phaseInProgress || isPlaying) {
+      console.log('Animation, phase, or play already in progress, skipping...');
       return;
     }
+
+    // Set playing state when starting animation via Next Instruction button
+    setIsPlaying(true);
+    setAnimationStarted(true);
 
     // Check if we have a current instruction to animate
     if (cpu.currentInstruction) {
@@ -474,9 +891,8 @@ const CPUDatapath: React.FC = () => {
         clearTimeout(animationTimeout);
         setIsAnimating(false);
         setShowStageAnimation(false);
-        stopAnimation();
-        setIsAnimating(false);
-        setShowStageAnimation(false);
+        setIsPlaying(false);
+        setIsPaused(false);
         stopAnimation();
       }
     } else {
@@ -973,6 +1389,7 @@ const CPUDatapath: React.FC = () => {
         yStart={components.InsMem.y + components.InsMem.height/2}
         yEnd={components.RegFile.y + 7*components.RegFile.height/10}
         color={COLORS.BLACK}
+        joinEnd={true}
       />
       <HorizontalSegment 
         xStart={verticalLines.INS_MEM_X}
@@ -2471,43 +2888,160 @@ const CPUDatapath: React.FC = () => {
 
 
 
-      {/* Simple Next Phase Button */}
+      {/* Phase Control Buttons */}
       {cpu.currentInstruction && (
-        <div className="absolute top-16 left-4 z-20">
+        <div className="absolute top-16 left-4 z-50 flex gap-2">
+          {/* Next Step Button - Enhanced: disabled when play mode is active or animation is running */}
           <button
             onClick={goToNextPhase}
-            disabled={phaseInProgress || isAnimating}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors shadow-lg ${
-              phaseInProgress || isAnimating
+            disabled={phaseInProgress || isAnimating || isPlaying || animationStarted}
+            className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors shadow-md ${
+              phaseInProgress || isAnimating || isPlaying || animationStarted
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
+            title={
+              isPlaying ? 'Next Step disabled while playing - use Pause to enable manual control' :
+              animationStarted ? 'Next Step disabled while animation sequence is active - use Pause to enable manual control' :
+              phaseInProgress ? 'Next Step disabled while phase is processing' :
+              isAnimating ? 'Next Step disabled while animation is running' :
+              'Execute next phase of current instruction'
+            }
           >
-            {phaseInProgress ? 'Processing...' : isAnimating ? 'Step Running...' : 'Next Step'}
+            {phaseInProgress ? 'Processing...' : 
+             isAnimating ? 'Step Running...' : 
+             isPlaying ? 'Playing...' : 
+             animationStarted ? 'Auto Mode...' : 
+             'Next Step'}
           </button>
+
+          {/* Replay Button - Enhanced: disabled when play mode is active or animation is running */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('🔄 Replay button clicked!');
+              const phaseToReplay = currentPhase - 1;
+              console.log('Current phase:', currentPhase);
+              console.log('Phase to replay (previous):', phaseToReplay);
+              console.log('Can replay previous stage:', phaseToReplay >= 0 ? instructionAnimationController.canReplayStage(phaseToReplay) : 'N/A (no previous phase)');
+              console.log('Phase in progress:', phaseInProgress);
+              console.log('Is animating:', isAnimating);
+              console.log('Is playing:', isPlaying);
+              console.log('History size:', instructionAnimationController.getStageHistorySize());
+              console.log('Stage history debug:', instructionAnimationController.getStageHistoryDebug());
+              
+              // Debug: Show which phases can be replayed
+              console.log('=== REPLAY AVAILABILITY DEBUG ===');
+              for (let i = 0; i < 5; i++) {
+                console.log(`Phase ${i}: Can replay = ${instructionAnimationController.canReplayStage(i)}`);
+              }
+              console.log('==================================');
+              
+              // Check if we can replay the previous phase
+              if (phaseToReplay >= 0 && instructionAnimationController.canReplayStage(phaseToReplay)) {
+                replayCurrentPhase();
+              } else {
+                console.log('❌ Cannot replay - no previous phase available or no saved state');
+              }
+            }}
+            disabled={phaseInProgress || isAnimating || isPlaying || animationStarted}
+            className={`px-3 py-1.5 text-sm rounded-md font-medium transition-colors shadow-md border-2 cursor-pointer ${
+              phaseInProgress || isAnimating || isPlaying || animationStarted
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-gray-500'
+                : (currentPhase > 0 && instructionAnimationController.canReplayStage(currentPhase - 1))
+                  ? 'bg-green-600 text-white hover:bg-green-700 border-green-400 hover:border-green-300'
+                  : 'bg-orange-600 text-white hover:bg-orange-700 border-orange-400 hover:border-orange-300'
+            }`}
+            style={{ 
+              pointerEvents: (phaseInProgress || isAnimating || isPlaying || animationStarted) ? 'none' : 'auto',
+              userSelect: 'none',
+              minWidth: '80px',
+              minHeight: '32px'
+            }}
+            title={
+              isPlaying ? 'Replay disabled while playing - use Pause to enable manual control' :
+              animationStarted ? 'Replay disabled while animation sequence is active - use Pause to enable manual control' :
+              phaseInProgress || isAnimating ? 'Replay disabled while animation is running' :
+              `Current Phase: ${currentPhase}, Previous Phase: ${currentPhase - 1}, Can replay previous: ${currentPhase > 0 ? instructionAnimationController.canReplayStage(currentPhase - 1) : 'N/A'}, History: ${instructionAnimationController.getStageHistorySize()}`
+            }
+          >
+            {isPlaying || animationStarted ? 'Auto Mode' : 
+             phaseInProgress || isAnimating ? 'Busy' :
+             `Replay ${currentPhase > 0 && instructionAnimationController.canReplayStage(currentPhase - 1) ? '✅' : '⚠️'}`}
+          </button>
+          
         </div>
       )}
 
-      {/* Original Next Step Button */}
+      {/* Play/Pause Button - Enhanced state management with manual control recovery */}
+      {cpu.currentInstruction && (
+        <div className="absolute bottom-4 left-4 z-50 flex gap-2">
+          <button
+            onClick={handlePlayPause}
+            disabled={
+              (phaseInProgress && !isPlaying && !isPaused) || 
+              (isAnimating && !isPlaying && !isPaused)
+            }
+            className={`px-4 py-2 text-sm rounded-md font-medium transition-colors shadow-md ${
+              (phaseInProgress && !isPlaying && !isPaused) || (isAnimating && !isPlaying && !isPaused)
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : isPlaying 
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : isPaused
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+            title={
+              isPlaying ? 'Pause automatic animation sequence' :
+              isPaused ? 'Resume automatic animation sequence' :
+              'Start automatic animation sequence for full instruction'
+            }
+          >
+            {isPlaying ? '⏸️ Pause' : isPaused ? '▶️ Resume' : '▶️ Play'}
+          </button>
+          
+          
+        </div>
+      )}
+
+      {/* Next Instruction Button - Enhanced state management */}
       <div className="absolute bottom-4 right-4 z-20">
         <button
           onClick={handleNextStep}
-          disabled={isAnimating || phaseInProgress}
-          className={`px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-all duration-200 ${
-            isAnimating || phaseInProgress
+          disabled={isAnimating || phaseInProgress || isPlaying || animationStarted}
+          className={`px-4 py-2 text-sm rounded-md font-semibold text-white shadow-md transition-all duration-200 ${
+            isAnimating || phaseInProgress || isPlaying || animationStarted
               ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-green-600 hover:bg-green-700 hover:shadow-xl active:scale-95'
+              : 'bg-green-600 hover:bg-green-700 hover:shadow-lg active:scale-95'
           }`}
+          title={
+            isPlaying ? 'Next Instruction disabled while playing - use Pause to enable manual control' :
+            animationStarted ? 'Next Instruction disabled while animation sequence is active - use Pause to enable manual control' :
+            phaseInProgress ? 'Next Instruction disabled while phase is processing' :
+            isAnimating ? 'Next Instruction disabled while animation is running' :
+            'Execute complete instruction animation sequence'
+          }
         >
           {isAnimating ? (
             <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               <span>Animating...</span>
             </div>
           ) : phaseInProgress ? (
             <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               <span>Stage Running...</span>
+            </div>
+          ) : isPlaying ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Playing...</span>
+            </div>
+          ) : animationStarted ? (
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Auto Mode...</span>
             </div>
           ) : (
             'Next Instruction'

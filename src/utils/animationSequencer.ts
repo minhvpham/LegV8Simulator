@@ -7,6 +7,9 @@ import { DataCircle, DataFlowOperation, StageDataFlow, Point } from '../types/an
 export class AnimationSequencer {
   private animationSpeed: number = 1;
   private activeAnimations: Map<string, AnimationPromise> = new Map();
+  private isPaused: boolean = false;
+  private pausePromise: Promise<void> | null = null;
+  private pauseResolve: (() => void) | null = null;
   
   // Callback functions
   private callbacks = {
@@ -152,11 +155,20 @@ export class AnimationSequencer {
     });
 
     // Simulate path-based movement animation
-    const startTime = Date.now();
+    let startTime = Date.now();
+    let pausedTime = 0;
     const path = animation.path || [animation.startPosition!, animation.endPosition!];
     
-    const animateStep = () => {
-      const elapsed = Date.now() - startTime;
+    const animateStep = async () => {
+      // Check if paused
+      if (this.isPaused && this.pausePromise) {
+        const pauseStart = Date.now();
+        await this.pausePromise;
+        pausedTime += Date.now() - pauseStart;
+        // After resume, continue with animation (don't exit)
+      }
+      
+      const elapsed = Date.now() - startTime - pausedTime;
       const progress = Math.min(elapsed / duration, 1);
       
       if (progress >= 1) {
@@ -224,10 +236,19 @@ export class AnimationSequencer {
     });
 
     // Simulate merge effect with convergence animation
-    const startTime = Date.now();
+    let startTime = Date.now();
+    let pausedTime = 0;
     
-    const animateStep = () => {
-      const elapsed = Date.now() - startTime;
+    const animateStep = async () => {
+      // Check if paused
+      if (this.isPaused && this.pausePromise) {
+        const pauseStart = Date.now();
+        await this.pausePromise;
+        pausedTime += Date.now() - pauseStart;
+        // After resume, continue with animation (don't exit)
+      }
+      
+      const elapsed = Date.now() - startTime - pausedTime;
       const progress = Math.min(elapsed / duration, 1);
       
       if (progress >= 1) {
@@ -289,10 +310,19 @@ export class AnimationSequencer {
       reject = rej;
     });
 
-    const startTime = Date.now();
+    let startTime = Date.now();
+    let pausedTime = 0;
     
-    const animateStep = () => {
-      const elapsed = Date.now() - startTime;
+    const animateStep = async () => {
+      // Check if paused
+      if (this.isPaused && this.pausePromise) {
+        const pauseStart = Date.now();
+        await this.pausePromise;
+        pausedTime += Date.now() - pauseStart;
+        // After resume, continue with animation (don't exit)
+      }
+      
+      const elapsed = Date.now() - startTime - pausedTime;
       const progress = Math.min(elapsed / duration, 1);
       
       if (progress >= 1) {
@@ -358,6 +388,71 @@ export class AnimationSequencer {
    */
   getActiveAnimationCount(): number {
     return this.activeAnimations.size;
+  }
+
+  /**
+   * Pause all animations
+   */
+  async pause(): Promise<void> {
+    if (this.isPaused) return;
+
+    console.log('🎬 AnimationSequencer: Pausing animations...');
+    this.isPaused = true;
+
+    // Create a promise that resolves when resumed
+    this.pausePromise = new Promise<void>((resolve) => {
+      this.pauseResolve = resolve;
+    });
+
+    console.log(`🎬 AnimationSequencer: Paused with ${this.activeAnimations.size} active animations`);
+  }
+
+  /**
+   * Resume paused animations
+   */
+  async resume(): Promise<void> {
+    if (!this.isPaused) return;
+
+    console.log('▶️ AnimationSequencer: Resuming animations...');
+    this.isPaused = false;
+
+    // Resolve the pause promise to continue any waiting animations
+    if (this.pauseResolve) {
+      this.pauseResolve();
+      this.pauseResolve = null;
+      this.pausePromise = null;
+    }
+
+    console.log(`▶️ AnimationSequencer: Resumed with ${this.activeAnimations.size} active animations`);
+  }
+
+  /**
+   * Stop all animations and reset sequencer state
+   */
+  stop(): void {
+    console.log('🛑 AnimationSequencer: Stopping all animations...');
+    
+    // Cancel all active animations
+    this.activeAnimations.forEach((animationPromise, id) => {
+      try {
+        animationPromise.cancel();
+      } catch (error) {
+        console.warn(`Failed to cancel animation ${id}:`, error);
+      }
+    });
+    
+    // Clear all active animations
+    this.activeAnimations.clear();
+    
+    // Reset pause state
+    this.isPaused = false;
+    if (this.pauseResolve) {
+      this.pauseResolve();
+      this.pauseResolve = null;
+      this.pausePromise = null;
+    }
+    
+    console.log('🛑 AnimationSequencer: All animations stopped and state reset');
   }
 }
 
