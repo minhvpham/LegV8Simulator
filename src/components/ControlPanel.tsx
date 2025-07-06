@@ -172,13 +172,25 @@ ADDI X11, XZR, #300`;
         <label className="block text-sm font-medium text-gray-700">
           Step Control
         </label>
-        <button
-          onClick={step}
-          disabled={isRunning && !isPaused}
-          className="w-full px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          ⏭️ Single Step
-        </button>
+        <div className="space-y-2">
+          <button
+            onClick={step}
+            disabled={isRunning && !isPaused}
+            className="w-full px-4 py-2 bg-cpu-yellow text-white rounded-lg font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            ⏭️ Single Step
+          </button>
+          <button
+            onClick={reset}
+            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+          >
+            🔄 Reset Program
+          </button>
+        </div>
+        <div className="text-xs text-gray-500">
+          <p>• Single Step: Execute one instruction</p>
+          <p>• Reset: Return to beginning of program</p>
+        </div>
       </div>
 
       {/* Animation Speed */}

@@ -18,6 +18,8 @@ export class InstructionAnimationController {
   private animationQueue: AnimationStep[] = [];
   private currentStep: number = 0;
   private isPlaying: boolean = false;
+  private isResetting: boolean = false;
+  private currentInstructionAborted: boolean = false;
   private currentInstruction: string | null = null;
   private animationSpeed: number = 1;
   
@@ -76,7 +78,16 @@ export class InstructionAnimationController {
         console.log(`Completed ${operation} animation for circle ${circleId}`);
       },
       onAnimationError: (circleId: string, error: Error) => {
-        console.error(`Animation error for circle ${circleId}:`, error);
+        // Handle animation cancellation errors gracefully
+        if (error.message === 'Animation cancelled') {
+          if (this.isResetting || this.currentInstructionAborted) {
+            console.log(`🛑 Animation cancellation for circle ${circleId} during reset - this is expected`);
+          } else {
+            console.log(`🛑 Animation cancelled for circle ${circleId} - likely due to cleanup`);
+          }
+        } else {
+          console.error(`Animation error for circle ${circleId}:`, error);
+        }
       }
     });
   }  /**
@@ -162,13 +173,28 @@ export class InstructionAnimationController {
       return;
     }
 
+    // Clear reset and abort flags IMMEDIATELY when starting new animation
+    this.isResetting = false;
+    this.currentInstructionAborted = false;
+
     this.currentInstruction = instruction;
     this.isPlaying = true;
     this.currentStep = 0;
 
+    console.log('🚀 Starting new animation - flags cleared:', {
+      isResetting: this.isResetting,
+      currentInstructionAborted: this.currentInstructionAborted
+    });
+
     try {
-      // Clear previous circles when starting new instruction
-      await this.clearAllCircles();
+      // Clear previous circles when starting new instruction - use immediate clear to prevent race conditions
+      this.clearAllCirclesImmediate();
+
+      // Add a small delay to ensure UI components process circle destruction callbacks
+      // This prevents old circles from persisting when new animation starts
+      await this.delay(50);
+      
+      console.log('🚀 Cleanup delay completed, starting new animation');
 
       // Get instruction opcode
       const opcode = instruction.trim().split(/\s+/)[0].toUpperCase();
@@ -179,21 +205,35 @@ export class InstructionAnimationController {
         console.warn(`No data flow defined for instruction: ${opcode}`);
         // Fall back to traditional animation
         await this.executeTraditionalAnimation(instruction);
-        // Make sure to call completion callback for traditional animation too
-        this.callbacks.onAnimationComplete();
+        // Make sure to call completion callback for traditional animation too (unless reset)
+        if (!this.isResetting && !this.currentInstructionAborted) {
+          this.callbacks.onAnimationComplete();
+        } else {
+          console.log('🛑 Traditional animation completion callback skipped due to reset');
+        }
         return;
       }
 
       // Execute multi-circle animation
       await this.executeMultiCircleAnimation();
 
-      this.callbacks.onAnimationComplete();
+      // Don't call completion callback if reset was called or instruction was aborted
+      if (!this.isResetting && !this.currentInstructionAborted) {
+        this.callbacks.onAnimationComplete();
+      } else {
+        console.log('🛑 Animation completion callback skipped due to reset');
+      }
     } catch (error) {
       console.error('Animation execution error:', error);
     } finally {
-      this.isPlaying = false;
-      this.currentInstruction = null;
-      this.currentStep = 0;
+      // Only clean up if not resetting (reset handles its own cleanup)
+      if (!this.isResetting && !this.currentInstructionAborted) {
+        this.isPlaying = false;
+        this.currentInstruction = null;
+        this.currentStep = 0;
+      } else {
+        console.log('🛑 Animation cleanup skipped due to reset - reset will handle cleanup');
+      }
     }
   }  /**
    * Execute multi-circle animation based on stage data flows
@@ -230,15 +270,33 @@ export class InstructionAnimationController {
 
     // Execute each stage
     for (let i = 0; i < this.stageDataFlows.length; i++) {
+      // Check reset and abort flags between stages to allow clean abort during reset
+      if (this.isResetting || this.currentInstructionAborted) {
+        console.log('🛑 Multi-circle animation aborted due to reset');
+        return;
+      }
+
       const stageFlow = this.stageDataFlows[i];
       this.currentStep = i;
       
       await this.executeStageFlow(stageFlow, i);
+
+      // Check after each stage execution completes
+      if (this.isResetting || this.currentInstructionAborted) {
+        console.log('🛑 Multi-circle animation aborted after stage completion due to reset');
+        return;
+      }
     }
   }  /**
    * Execute a single stage flow with circle operations
    */
   private async executeStageFlow(stageFlow: StageDataFlow, stageIndex: number): Promise<void> {
+    // Critical abort check - stop if reset was called or instruction was aborted
+    if (this.isResetting || this.currentInstructionAborted) {
+      console.log('🛑 Stage flow execution aborted due to reset');
+      return;
+    }
+
     console.log(`Executing stage flow: ${stageFlow.stageName} with ${stageFlow.operations.length} operations`);
     
     this.callbacks.onStageStart(
@@ -254,12 +312,36 @@ export class InstructionAnimationController {
       stageIndex
     );
 
-    // Process operations in timing order (better approach for visualization)
+    // Process operations in timing order with proper absolute timing
     const operationsByTiming = this.groupOperationsByTiming(stageFlow.operations);
+    const stageStartTime = Date.now();
     
     for (const timingEntry of Array.from(operationsByTiming.entries()).sort(([a], [b]) => a - b)) {
+      // Abort check during timing loop - crucial for paused animations
+      if (this.isResetting || this.currentInstructionAborted) {
+        console.log('🛑 Timing loop execution aborted due to reset');
+        return;
+      }
+
       const [timing, operations] = timingEntry;
-      console.log(`Executing ${operations.length} operations at timing ${timing}`);
+      console.log(`Executing ${operations.length} operations at timing ${timing}ms`);
+      
+      // Wait for the absolute timing from stage start
+      if (timing > 0) {
+        const elapsedTime = Date.now() - stageStartTime;
+        const remainingDelay = timing - elapsedTime;
+        
+        if (remainingDelay > 0) {
+          console.log(`⏱️ Waiting ${remainingDelay}ms for timing ${timing}ms`);
+          await this.delay(remainingDelay);
+        }
+      }
+      
+      // Check abort again after delay
+      if (this.isResetting || this.currentInstructionAborted) {
+        console.log('🛑 Timing loop execution aborted during delay');
+        return;
+      }
       
       if (stageFlow.simultaneousFlows && operations.length > 1) {
         // Execute operations in parallel for this timing group
@@ -268,13 +350,13 @@ export class InstructionAnimationController {
       } else {
         // Execute operations sequentially
         for (const operation of operations) {
+          // Abort check between operations
+          if (this.isResetting || this.currentInstructionAborted) {
+            console.log('🛑 Operation loop execution aborted due to reset');
+            return;
+          }
           await this.executeCircleOperation(operation, stageFlow.stageName);
         }
-      }
-      
-      // Add small delay between timing groups for visual clarity
-      if (timing > 0) {
-        await this.delay(200);
       }
     }
 
@@ -294,6 +376,12 @@ export class InstructionAnimationController {
   /**
    * Execute a single circle operation (split, merge, transform, move)
    */  private async executeCircleOperation(operation: DataFlowOperation, stageName: string): Promise<void> {
+    // Abort check at operation start
+    if (this.isResetting || this.currentInstructionAborted) {
+      console.log('🛑 Circle operation execution aborted due to reset');
+      return;
+    }
+
     try {
       console.log(`Executing ${operation.type} operation for stage ${stageName}:`, operation);
       
@@ -314,6 +402,18 @@ export class InstructionAnimationController {
           console.warn('Unknown operation type:', operation.type);
       }
     } catch (error) {
+      // Check if this is a cancellation error during reset - if so, don't log as error
+      if (this.isResetting || this.currentInstructionAborted) {
+        console.log(`🛑 Operation ${operation.type} cancelled due to reset - this is expected`);
+        return;
+      }
+      
+      // Check if this is an animation cancellation error during cleanup
+      if (error instanceof Error && error.message === 'Animation cancelled') {
+        console.log(`🛑 Animation cancelled during operation ${operation.type} - likely due to cleanup`);
+        return;
+      }
+      
       console.error(`Error executing ${operation.type} operation:`, error);
       // Continue with the animation even if one operation fails
     }
@@ -403,7 +503,11 @@ export class InstructionAnimationController {
       if (!sourceCircle) {
         sourceCircle = activeCircles[0];
         console.log('⚠️ DEBUG: Split using first active circle as source:', sourceCircle.id);
-        console.log('🚨 DEBUG: THIS IS THE PROBLEM! Using wrong circle instead of requested:', operation.sourceCircleIds[0]);
+        if (operation.sourceCircleIds.length > 0) {
+          console.log('🚨 DEBUG: THIS IS THE PROBLEM! Using wrong circle instead of requested:', operation.sourceCircleIds[0]);
+        } else {
+          console.log('✅ DEBUG: No specific source circle requested - using fallback for initial split');
+        }
       }
     }
       // If still no source circle, this might be the start of a new instruction
@@ -448,7 +552,7 @@ export class InstructionAnimationController {
       console.error('🔴 SPLIT OPERATION FAILED!');
       if (!sourceCircle) {
         console.error('❌ No source circle found');
-        console.error('🔍 Requested ID:', operation.sourceCircleIds[0] || 'NONE');
+        console.error('🔍 Requested ID:', operation.sourceCircleIds.length > 0 ? operation.sourceCircleIds[0] : 'NONE');
         console.error('📋 Available circles:', Array.from(this.activeCircles.keys()));
       }
       if (!operation.results) {
@@ -458,14 +562,17 @@ export class InstructionAnimationController {
       return;
     }    console.log(`🎯 DEBUG: Final selected source circle: ${sourceCircle?.id} for splitting into ${operation.results?.length || 0} new circles`);
     
-    if (sourceCircle && operation.sourceCircleIds[0] !== sourceCircle.id) {
+    // Only show bug detection if a specific circle was requested but not found
+    if (sourceCircle && operation.sourceCircleIds.length > 0 && operation.sourceCircleIds[0] !== sourceCircle.id) {
       console.error('🚨 BUG DETECTED! Requested circle:', operation.sourceCircleIds[0], 'but using circle:', sourceCircle.id);
     }
 
     // Highlight components for split operation
     const sourceComponent = this.getComponentNameFromPosition(sourceCircle.position);
     const targetComponents = operation.results.map(result => result.targetComponent);
-    const allComponents = [sourceComponent, ...targetComponents];
+    
+    // Filter out 'Unknown' components to prevent highlighting errors
+    const allComponents = [sourceComponent, ...targetComponents].filter(comp => comp !== 'Unknown' && comp !== null && comp !== undefined);
     this.highlightOperationComponents('split', allComponents);
 
     // Create new circles from split with real CPU data using calculator
@@ -1502,10 +1609,11 @@ export class InstructionAnimationController {
    * Stop current animation (enhanced version)
    */
   stop(): void {
-    this.isPlaying = false;
-    this.animationSequencer.cancelAll();
-    this.clearAllCircles();
+    this.resetWithAbort();
     this.resetHighlights();
+    
+    // Clear reset flag immediately
+    this.isResetting = false;
   }
 
   /**
@@ -1518,15 +1626,16 @@ export class InstructionAnimationController {
     this.animationSequencer.stop();
     
     // Reset internal state
-    this.isPlaying = false;
     this.currentInstruction = null;
     this.currentStep = 0;
     
-    // Clear active circles
-    this.activeCircles.clear();
-    this.circleManager.clearAll();
+    // Clear active circles with abort
+    this.resetWithAbort();
     
     console.log('🛑 InstructionAnimationController: All animations stopped and state reset');
+    
+    // Clear reset flag immediately
+    this.isResetting = false;
   }
 
   /**
@@ -1612,13 +1721,14 @@ export class InstructionAnimationController {
    * Force clear all animations and circles (emergency stop)
    */
   emergencyStop(): void {
-    this.isPlaying = false;
-    this.animationSequencer.cancelAll();
-    this.clearAllCircles();
+    this.resetWithAbort();
     this.resetHighlights();
     this.stageDataFlows = [];
     this.currentStep = 0;
     this.currentInstruction = null;
+    
+    // Clear reset flag immediately for emergency stop, but keep instruction aborted
+    this.isResetting = false;
   }
 
   /**
@@ -1789,8 +1899,8 @@ export class InstructionAnimationController {
    * Initialize the animation system for phase-by-phase execution
    */
   private async initializePhaseAnimation(): Promise<void> {
-    // Clear any existing circles
-    await this.clearAllCircles();
+    // Clear any existing circles immediately
+    this.clearAllCirclesImmediate();
 
     // Initialize with first circle (PC value) at PC component with real CPU data
     const pcPosition = this.getComponentPosition('PC');
@@ -1835,14 +1945,98 @@ export class InstructionAnimationController {
    * Public method to reset the animation state
    * Clears all active circles and resets internal state
    */
-  resetAnimationState(): void {
-    this.clearAllCircles();
+  async resetAnimationState(): Promise<void> {
+    console.log('🔄 Starting reset animation state...');
+    
+    // Use reset with abort for actual reset operations
+    this.resetWithAbort();
+    
+    console.log('Animation controller state reset');
+    
+    // Add a delay to ensure all cleanup operations complete
+    // This is crucial for preventing race conditions with new animations
+    await this.delay(100);
+    
+    // Clear reset and abort flags after ensuring cleanup completes
+    this.isResetting = false;
+    this.currentInstructionAborted = false;
+    console.log('🔄 Reset and abort flags cleared after delay - ready for new animations');
+  }
+
+  /**
+   * Immediately clear all circles without fade-out animations
+   * Used during reset to prevent race conditions
+   */
+  private clearAllCirclesImmediate(): void {
+    console.log('🧹 Clearing all circles immediately (no fade-out)');
+    console.log(`🧹 Before clear: ${this.activeCircles.size} active circles, ${this.animationSequencer.getActiveAnimationCount()} active animations`);
+    
+    // Stop any ongoing animations first - cancellation errors are now handled internally
+    this.animationSequencer.cancelAll();
+    
+    // Wait a brief moment for cancellations to complete
+    const animationCount = this.animationSequencer.getActiveAnimationCount();
+    if (animationCount > 0) {
+      console.log(`🧹 Waiting for ${animationCount} animations to cancel...`);
+    }
+    
+    // Create a list of all circles to destroy before clearing data structures
+    const circlesToDestroy = Array.from(this.activeCircles.entries());
+    
+    console.log(`🧹 Destroying ${circlesToDestroy.length} circles:`, circlesToDestroy.map(([id, circle]) => ({
+      id,
+      dataValue: circle.dataValue,
+      position: circle.position,
+      isActive: circle.isActive
+    })));
+    
+    // Immediately destroy all circles
+    circlesToDestroy.forEach(([id, circle]) => {
+      console.log(`🗑️ Destroying circle: ${id}`);
+      this.callbacks.onCircleDestroy(id);
+    });
+    
+    // Clear all data structures
+    this.activeCircles.clear();
+    this.circleManager.clearAll();
+    
+    // Clear any wire path calculations
+    if (this.wirePathCalculator && this.wirePathCalculator.clearAllPaths) {
+      this.wirePathCalculator.clearAllPaths();
+    }
+    
+    // Force clear highlights
+    this.callbacks.onClearHighlights();
+    
+    console.log(`🧹 After clear: ${this.activeCircles.size} active circles, ${this.animationSequencer.getActiveAnimationCount()} active animations`);
+    console.log('🧹 All circles cleared immediately');
+  }
+
+  /**
+   * Reset animation state with reset flag to abort ongoing operations
+   * Only used during actual reset operations
+   */
+  private resetWithAbort(): void {
+    console.log('🛑 Resetting with abort flag');
+    
+    // Set reset flags to abort any ongoing execution
+    this.isResetting = true;
+    this.currentInstructionAborted = true;  // Permanent abort for current instruction
     this.isPlaying = false;
+    
+    // Clear circles immediately
+    this.clearAllCirclesImmediate();
+    
+    // Stop the animation sequencer completely
+    this.animationSequencer.stop();
+    
+    // Reset internal state
     this.currentInstruction = null;
     this.currentStep = 0;
     this.stageDataFlows = [];
     this.stageHistory.clear();
-    console.log('Animation controller state reset');
+    
+    console.log('🛑 Reset with abort completed');
   }
 
   /**
@@ -1908,8 +2102,8 @@ export class InstructionAnimationController {
     console.log(`🔄 Replaying stage ${stageIndex}: ${stageState.stageName}`);
     console.log(`🔄 Before clearing: ${this.activeCircles.size} active circles`);
 
-    // Clear current circles and wait for completion
-    await this.clearAllCircles();
+    // Clear current circles immediately for replay
+    this.clearAllCirclesImmediate();
     console.log(`🔄 After clearing: ${this.activeCircles.size} active circles`);
 
     // Restore initial circles with fade-in animation
