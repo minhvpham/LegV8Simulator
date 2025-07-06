@@ -425,6 +425,35 @@ export class AnimationSequencer {
 
     console.log(`▶️ AnimationSequencer: Resumed with ${this.activeAnimations.size} active animations`);
   }
+
+  /**
+   * Stop all animations and reset sequencer state
+   */
+  stop(): void {
+    console.log('🛑 AnimationSequencer: Stopping all animations...');
+    
+    // Cancel all active animations
+    this.activeAnimations.forEach((animationPromise, id) => {
+      try {
+        animationPromise.cancel();
+      } catch (error) {
+        console.warn(`Failed to cancel animation ${id}:`, error);
+      }
+    });
+    
+    // Clear all active animations
+    this.activeAnimations.clear();
+    
+    // Reset pause state
+    this.isPaused = false;
+    if (this.pauseResolve) {
+      this.pauseResolve();
+      this.pauseResolve = null;
+      this.pausePromise = null;
+    }
+    
+    console.log('🛑 AnimationSequencer: All animations stopped and state reset');
+  }
 }
 
 // Supporting interfaces

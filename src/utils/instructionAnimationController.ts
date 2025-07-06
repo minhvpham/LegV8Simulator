@@ -1509,6 +1509,27 @@ export class InstructionAnimationController {
   }
 
   /**
+   * Stop all animations and reset controller state
+   */
+  stopAllAnimations(): void {
+    console.log('🛑 InstructionAnimationController: Stopping all animations...');
+    
+    // Stop the animation sequencer
+    this.animationSequencer.stop();
+    
+    // Reset internal state
+    this.isPlaying = false;
+    this.currentInstruction = null;
+    this.currentStep = 0;
+    
+    // Clear active circles
+    this.activeCircles.clear();
+    this.circleManager.clearAll();
+    
+    console.log('🛑 InstructionAnimationController: All animations stopped and state reset');
+  }
+
+  /**
    * Pause current animation
    */
   pause(): void {
