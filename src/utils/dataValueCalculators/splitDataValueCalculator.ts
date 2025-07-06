@@ -139,37 +139,8 @@ export class SplitDataValueCalculator {
               const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
               const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
 
-              let extractedBits = '';
 
-              // Extract immediate bits based on instruction format
-              switch (instructionFormat) {
-                case 'I':
-                  // I-Type: Extract bits [21:10] (12 bits)
-                  extractedBits = instructionBinary.substring(10, 22);
-                  break;
-
-                case 'D':
-                  // D-Type: Extract bits [20:12] (9 bits)
-                  extractedBits = instructionBinary.substring(11, 20);
-                  break;
-
-                case 'CB':
-                  // CB-Type: Extract bits [23:5] (19 bits)
-                  extractedBits = instructionBinary.substring(8, 27);
-                  break;
-
-                case 'B':
-                  // B-Type: Extract bits [25:0] (26 bits)
-                  extractedBits = instructionBinary.substring(6, 32);
-                  break;
-
-                default:
-                  console.warn(`🔴 Unknown instruction format: ${instructionFormat}, defaulting to I-Type`);
-                  extractedBits = instructionBinary.substring(10, 22);
-                  break;
-              }
-
-              actualValue = extractedBits;
+              actualValue = instructionBinary;
               console.log(`🎯 Resolved INSTRUCTION_IMMEDIATE_FIELD to: ${actualValue}`);
             } else {
               console.warn(`🔴 Cannot extract immediate field: missing machineCode32Bit or format`);
@@ -246,7 +217,7 @@ export class SplitDataValueCalculator {
 
           case 'D_SIGNEXT_IMM':
           case 'D_BRANCH_IMM':
-            // Sign extension logic for immediate values
+            // Sign extension logic for immediate 
             if (this.machineCodeBreakdown?.machineCode32Bit && this.machineCodeBreakdown?.format) {
               const instructionBinary = this.machineCodeBreakdown.machineCode32Bit;
               const instructionFormat = this.machineCodeBreakdown.format.toUpperCase();
