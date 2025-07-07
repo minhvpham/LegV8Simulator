@@ -242,9 +242,16 @@ export class InstructionAnimationController {
     // Initialize with first circle (PC value) at PC component with real CPU data
     const pcPosition = this.getComponentPosition('PC');
     
-    // Get actual PC value from CPU state
-    let pcValue: string | number = 'PC_VALUE';
-    
+    // // Get actual PC value from CPU state
+    // let pcValue: string | number = 'PC_VALUE';
+     let pcValue: string = '0x00400000'; // Default fallback
+    if (this.cpuState) {
+      const currentPC = this.cpuState.pc;
+      pcValue = `0x${currentPC.toString(16).toUpperCase().padStart(8, '0')}`;
+      console.log(`📍 Initializing Phase 1 with actual PC value: ${pcValue}`);
+    } else {
+      console.warn('⚠️ No CPU state available, using default PC value');
+    }
     const initialCircle = this.circleManager.createCircle(
       pcValue, // Now uses actual PC value from CPU state
       'pc_value',
