@@ -1,9 +1,11 @@
 import { DataCircle, DataFlowOperation } from '../../types/animationTypes';
 import { CPUState } from '../../types';
+import { DataCircleManager } from '../circleManager';
 
 export class TransformDataValueCalculator {
   private cpuState: CPUState | null = null;
   private machineCodeBreakdown: any = null;
+  private circleManager: DataCircleManager | null = null;
 
   /**
    * Set current CPU state for data integration
@@ -17,6 +19,32 @@ export class TransformDataValueCalculator {
    */
   setMachineCodeBreakdown(machineCode: any): void {
     this.machineCodeBreakdown = machineCode;
+  }
+
+  setCircleManager(manager: DataCircleManager): void {
+    this.circleManager = manager;
+    console.log('🔗 TransformDataValueCalculator: Circle manager set');
+  }
+  /**
+   * Find a circle by ID from the global circle manager
+   */
+  private findCircleByIdFromGlobalManager(circleId: string): DataCircle | null {
+    if (!this.circleManager) {
+      console.error('🔴 Circle manager is not set in TransformDataValueCalculator');
+      return null;
+    }
+    const allCircles = this.circleManager.getActiveCircles();
+    const foundCircle = allCircles.find(circle => circle.id === circleId);
+    console.log(`🔍 Searching for circle: ${circleId}`);
+    console.log(`🔍 Available circles (${allCircles.length}):`, allCircles.map(c => c.id).join(', '));
+    
+    if (foundCircle) {
+      console.log(`🎯 Found circle ${circleId} with value: ${foundCircle.dataValue}`);
+      return foundCircle;
+    } else {
+      console.warn(`🔴 Circle ${circleId} not found in circle manager`);
+      return null;
+    }
   }
 
   /**
@@ -140,8 +168,43 @@ export class TransformDataValueCalculator {
               // Parse the register index from the source circle's binary data
               const registerIndex = parseInt(sourceCircle.dataValue as string, 2);
               if (!isNaN(registerIndex) && registerIndex >= 0 && registerIndex <= 31) {
-                // XZR (register 31) always returns 0, others read from CPU state
-                const registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
+                // Check if this is an IM-format instruction (MOVZ/MOVK) where Rn is not used
+                const instructionFormat = this.machineCodeBreakdown?.format;
+                let registerValue;
+                
+                if (instructionFormat === 'IM' && sourceCircle.id === 'D_Rn_Idx') {
+                  // For IM-format instructions like MOVZ, Rn is not used, so use 0
+                  // But if MOVK, we will read the register value from CPU state at D_Write_Addr_Idx 
+                  // First, check if the instruction is MOVK
+                 const instructionName = this.machineCodeBreakdown?.fields?.opcode?.value?.replace(',', '').toUpperCase();
+                  if (instructionName && instructionName.startsWith('MOVK')) {
+                    // take the value from the register at D_Write_Addr_Idx from circle manger. Find the circle with D_Write_Addr_Idx
+                    const writeAddrCircle = this.findCircleByIdFromGlobalManager('D_Write_Addr_Idx');
+                    if (writeAddrCircle) {
+                      // Get the destination register index from D_Write_Addr_Idx
+                      const destRegisterIndex = parseInt(writeAddrCircle.dataValue as string, 2);
+                      if (!isNaN(destRegisterIndex) && destRegisterIndex >= 0 && destRegisterIndex <= 31) {
+                        // Read the current value from the destination register
+                        registerValue = destRegisterIndex === 31 ? 0 : (this.cpuState.registers[destRegisterIndex] || 0);
+                        console.log(`🎯 MOVK: Reading current value from destination register X${destRegisterIndex} = ${registerValue}`);
+                      } else {
+                        console.error(`🔴 Invalid destination register index for MOVK: ${writeAddrCircle.dataValue}`);
+                        registerValue = 0;
+                      }
+                    } else {
+                      console.error(`🔴 Could not find D_Write_Addr_Idx circle for MOVK instruction`);
+                      registerValue = 0;
+                    }
+                  } else {
+                    // For MOVZ, Rn is not used
+                    registerValue = 0;
+                    console.log(`🎯 IM-format instruction detected: Using 0 for Rn (register not used)`);
+                  }
+                  console.log(`🎯 IM-format instruction detected: Using 0 for Rn (register not used)`);
+                } else {
+                  // XZR (register 31) always returns 0, others read from CPU state
+                  registerValue = registerIndex === 31 ? 0 : (this.cpuState.registers[registerIndex] || 0);
+                }
                 
                 // Convert to 32-bit binary representation with proper two's complement handling
                 let binaryValue: string;

@@ -75,7 +75,8 @@ export class MergeDataValueCalculator {
         
         if (aluOpCircle && functCircle) {
           const aluOpValue = aluOpCircle.dataValue.toString();
-          const functValue = functCircle.dataValue.toString();
+          // get only 8 bits of funct value
+          const functValue = functCircle.dataValue.toString().slice(0, 8);
           
           console.log(`🔧 ALUOp = ${aluOpValue} (binary)`);
           console.log(`🔧 D_Funct = ${functValue} (function field)`);
@@ -107,8 +108,15 @@ export class MergeDataValueCalculator {
               console.log(`✅ ALUOp=00 (Load/Store): Generated ALU Control = ${resolvedData} (ADD for address)`);
             } else {
               // Other ALUOp values (11 = Move, etc.)
-              resolvedData = '1111'; // Pass through B operand
-              console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
+              // for movk
+              if (functValue === '11010100') {
+                resolvedData = '1110'; // MOVK
+                console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (MOVK)`);
+              }
+              else if (functValue === '11010101') {
+                resolvedData = '1111'; // Pass through B operand
+                console.log(`✅ ALUOp=${aluOpValue}: Generated ALU Control = ${resolvedData} (pass through)`);
+              }
             }
           }
         } else {
@@ -149,7 +157,7 @@ export class MergeDataValueCalculator {
           } else {
             // Select input 1: Immediate data (for I-Type, D-Type)
             resolvedData = immDataCircle.dataValue.toString();
-            console.log(`✅ ALUSrc=1: Selected Immediate data = ${resolvedData} (I-Type/D-Type)`);
+            console.log(`✅ ALUSrc=1: Selected Immediate data = ${resolvedData} (I-Type/D-Type/IM-Type)`);
           }
         } else {
           console.error('🔴 ALUSRC MUX MERGE: Missing required circles');
@@ -267,6 +275,57 @@ export class MergeDataValueCalculator {
               console.log(`   - Operation: ${operand1} >>> ${operand2} = ${aluResult} (LSR)`);
               break;
             case '1110': // MOVK - Special case
+              console.log(`   - MOVK Operation: Combining register value with shifted immediate`);
+              
+              // Get the instruction word to extract the shift amount
+              // We need to find a way to get the raw instruction word
+              let instructionWord = 0;
+              
+              // Try to get instruction from machine code breakdown
+              if (this.machineCodeBreakdown?.machineCode32Bit) {
+                const binaryString = this.machineCodeBreakdown.machineCode32Bit;
+                instructionWord = parseInt(binaryString, 2);
+                console.log(`   - Instruction word (from machineCode): 0x${instructionWord.toString(16).toUpperCase()}`);
+              } else {
+                console.warn(`   - Warning: Could not get instruction word for MOVK shift calculation`);
+              }
+              
+              // Extract hw field (bits [22:21]) to determine shift amount
+              const hw_shift_field = (instructionWord >> 21) & 0x3;
+              const shiftAmount = hw_shift_field * 16; // Convert to actual shift amount (0, 16, 32, or 48)
+              
+              console.log(`   - hw field: ${hw_shift_field}, shift amount: ${shiftAmount} bits`);
+              console.log(`   - Original register value (operand1): ${operand1}`);
+              console.log(`   - Shifted immediate (operand2): ${operand2}`);
+              
+              // For JavaScript number safety, we'll work with BigInt for 64-bit operations
+              const bigOperand1 = BigInt(operand1);
+              const bigOperand2 = BigInt(operand2);
+              const bigShiftAmount = BigInt(shiftAmount);
+              
+              // Create a 64-bit mask to clear the 16 bits at the target position
+              const mask = ~(BigInt(0xFFFF) << bigShiftAmount);
+              console.log(`   - Mask (64-bit): 0x${mask.toString(16).toUpperCase()}`);
+              
+              // Clear the bits in the original value, then OR the new immediate part into the cleared space
+              const clearedOperand1 = bigOperand1 & mask;
+              const result = clearedOperand1 | bigOperand2;
+              
+              console.log(`   - Cleared original value: 0x${clearedOperand1.toString(16).toUpperCase()}`);
+              console.log(`   - Final result: 0x${result.toString(16).toUpperCase()}`);
+              
+              // Convert back to JavaScript number (handling potential overflow)
+              // For 32-bit systems, we need to ensure the result fits in 32 bits
+              let finalResult = Number(result);
+              
+              // If the result is larger than 32-bit signed range, truncate it
+              if (finalResult > 0x7FFFFFFF) {
+                finalResult = finalResult | 0; // Force 32-bit signed conversion
+              }
+              
+              aluResult = finalResult;
+              console.log(`   - MOVK Operation: ${operand1} combined with shifted immediate ${operand2} = ${aluResult}`);
+              break;
             case '1111': // MOVZ - Special case
               aluResult = operand2; // Pass the immediate value
               console.log(`   - Operation: Pass immediate = ${aluResult} (MOVK/MOVZ)`);
