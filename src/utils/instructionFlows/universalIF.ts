@@ -34,7 +34,7 @@ export const UNIVERSAL_IF_STAGE: StageDataFlow = {
     {
       type: 'split',
       timing: 0,
-      sourceCircleIds: [],
+      sourceCircleIds: [], // Empty for initial split - animation controller will create initial circle
       targetComponent: 'PC',
       results: [
         {
