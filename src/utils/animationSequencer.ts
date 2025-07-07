@@ -112,6 +112,14 @@ export class AnimationSequencer {
       this.callbacks.onAnimationComplete(animation.circleId, animation.operation);
     } catch (error) {
       this.callbacks.onAnimationError(animation.circleId, error as Error);
+      
+      // Don't re-throw cancellation errors - they're expected during cleanup
+      if (error instanceof Error && error.message === 'Animation cancelled') {
+        // Cancellation is expected during cleanup - don't propagate error
+        return;
+      }
+      
+      // Re-throw other errors
       throw error;
     } finally {
       this.activeAnimations.delete(animationId);
@@ -378,7 +386,12 @@ export class AnimationSequencer {
   cancelAll(): void {
     for (const animationEntry of Array.from(this.activeAnimations.entries())) {
       const [id, animation] = animationEntry;
-      animation.cancel();
+      try {
+        animation.cancel();
+      } catch (error) {
+        // Cancellation errors are expected - don't log them as errors
+        console.log(`Animation ${id} cancelled during cleanup`);
+      }
     }
     this.activeAnimations.clear();
   }

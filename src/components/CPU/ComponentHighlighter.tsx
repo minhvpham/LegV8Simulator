@@ -82,6 +82,11 @@ const ComponentHighlighter: React.FC<ComponentHighlighterProps> = ({
     highlights.forEach((highlight) => {
       const { componentId, highlightType, duration, intensity = 1 } = highlight;
       
+      // Skip invalid or unknown component IDs
+      if (!componentId || componentId === 'Unknown' || componentId.trim() === '') {
+        return;
+      }
+      
       // Get component coordinates
       const component = componentCoordinates[componentId];
       if (!component) {
