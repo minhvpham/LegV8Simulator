@@ -202,6 +202,9 @@ export function getStageSequenceForInstruction(instructionType: string): Executi
     'ORRI': 'I_TYPE_IMMEDIATE',
     'EORI': 'I_TYPE_IMMEDIATE',
     
+    'MOVZ': 'I_TYPE_IMMEDIATE',
+    'MOVK': 'I_TYPE_IMMEDIATE',
+    
     'LDUR': 'LOAD',
     'LDURB': 'LOAD',
     'LDURH': 'LOAD',

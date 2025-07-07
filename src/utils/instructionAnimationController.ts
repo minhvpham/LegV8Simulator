@@ -68,6 +68,8 @@ export class InstructionAnimationController {
     this.splitCalculator = new SplitDataValueCalculator();
     this.mergeCalculator = new MergeDataValueCalculator();
     this.transformCalculator = new TransformDataValueCalculator();
+
+    this.transformCalculator.setCircleManager(this.circleManager);
     
     // Setup animation sequencer callbacks
     this.animationSequencer.setCallbacks({

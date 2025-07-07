@@ -241,6 +241,43 @@ export class SplitDataValueCalculator {
                   bitCount = 9;
                   break;
 
+                case 'IM':
+                case 'IM-TYPE':
+                  // IM-Type (MOVZ/MOVK): Special handling for wide immediate
+                  // Extract 16-bit immediate [20:5] and 2-bit hw field [22:21]
+                  const immediate16 = instructionBinary.substring(11, 27); // positions 11-26 (16 bits)
+                  const hwField = instructionBinary.substring(9, 11); // positions 9-10 (2 bits)
+                  
+                  // Calculate shift amount: hw * 16 (0, 16, 32, or 48)
+                  const hwValue = parseInt(hwField, 2);
+                  const shiftAmount = hwValue * 16;
+                  
+                  console.log(`🎯 MOVZ/MOVK Processing:`);
+                  console.log(`   - 16-bit immediate: ${immediate16} (0x${parseInt(immediate16, 2).toString(16)})`);
+                  console.log(`   - HW field: ${hwField} (${hwValue}) → shift by ${shiftAmount} bits`);
+                  
+                  // For MOVZ: Place immediate in correct 16-bit slot, zero all other bits
+                  // For MOVK: Would be handled differently but follows similar pattern
+                  const immediate16Value = parseInt(immediate16, 2);
+                  let result64Bit = BigInt(0);
+                  
+                  // Use BigInt for safe 64-bit operations
+                  if (shiftAmount === 0) {
+                    result64Bit = BigInt(immediate16Value);
+                  } else {
+                    result64Bit = BigInt(immediate16Value) << BigInt(shiftAmount);
+                  }
+                  
+                  // Convert to 32-bit representation for this simulator
+                  // Since we're working with 32-bit values, limit the result
+                  const result32Bit = Number(result64Bit & BigInt(0xFFFFFFFF));
+                  actualValue = result32Bit.toString(2).padStart(32, '0');
+                  
+                  console.log(`✅ MOVZ Result: 0x${result32Bit.toString(16).toUpperCase().padStart(8, '0')} (${actualValue})`);
+                  
+                  // Skip normal sign extension for IM-format
+                  break;
+
                 case 'CB':
                 case 'CB-TYPE':
                   // CB-Type: Extract bits [23:5] (19 bits)
@@ -262,8 +299,8 @@ export class SplitDataValueCalculator {
                   break;
               }
 
-              // Perform sign extension to 32 bits
-              if (extractedBits.length > 0) {
+              // Perform sign extension to 32 bits (skip for IM-format as it's already processed)
+              if (extractedBits.length > 0 && instructionFormat !== 'IM' && instructionFormat !== 'IM-TYPE') {
                 const msb = extractedBits[0]; // Most significant bit
                 const isNegative = msb === '1';
 
